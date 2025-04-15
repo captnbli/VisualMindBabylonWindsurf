@@ -1,4 +1,4 @@
-import { Concept } from './concept.js';
+import { Concept } from './concept';
 
 class Question extends Concept {
   constructor(scene, options = {}) {

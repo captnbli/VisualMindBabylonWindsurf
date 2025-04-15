@@ -3,40 +3,43 @@
 # Directory to scan
 PROJECT_DIR=${1:-.}
 
-# Output file name
+# Output file name (relative to PROJECT_DIR)
 OUTPUT_FILE=${2:-"code_summary.md"}
+OUTPUT_PATH="$PROJECT_DIR/$OUTPUT_FILE"
 
 # Clean previous output
-echo "# Project Snapshot: $(basename "$PROJECT_DIR")" > "$OUTPUT_FILE"
-echo >> "$OUTPUT_FILE"
-echo "## Directory Structure" >> "$OUTPUT_FILE"
-echo '```' >> "$OUTPUT_FILE"
-tree -I "node_modules|dist|.git" "$PROJECT_DIR" >> "$OUTPUT_FILE"
-echo '```' >> "$OUTPUT_FILE"
+echo "# Project Snapshot: $(basename "$PROJECT_DIR")" > "$OUTPUT_PATH"
+echo >> "$OUTPUT_PATH"
+echo "## Directory Structure" >> "$OUTPUT_PATH"
+echo '```' >> "$OUTPUT_PATH"
+tree -I "node_modules|dist|.git|$OUTPUT_FILE|helvetiker_regular.typefaceon" "$PROJECT_DIR" >> "$OUTPUT_PATH"
+echo '```' >> "$OUTPUT_PATH"
 
-echo >> "$OUTPUT_FILE"
-echo "## Selected Files" >> "$OUTPUT_FILE"
+echo >> "$OUTPUT_PATH"
+echo "## Selected Files" >> "$OUTPUT_PATH"
 
-# Patterns to match — add as needed
+# Patterns to match — tailored for VisualMind + Babylon setup
 PATTERNS=(
-  "*.ts"               # TypeScript files, including Babylon setup
-  "*.tsx"              # If you ever use JSX/TSX components
-  "*.html"             # Likely index.html in root or /public
-  "*.json"             # tsconfig.json, package.json, etc.
-  "*.css"              # Any styling
-  "*.scss"             # If you use Sass
-  "*.md"               # README.md or project notes
-  "vite.config.*"      # Vite configuration
-  "babylon.*"          # Custom Babylon helpers or configs
+  "*.ts"
+  "*"
+  "*.html"
+  "*on"
+  "*.css"
+  "*.md"
+  "vite.config.*"
 )
 
-
-# Build file list using find
+# Build file list using find, excluding unneeded files
 MATCHED_FILES=()
 for pattern in "${PATTERNS[@]}"; do
   while IFS= read -r -d '' file; do
+    [[ "$file" == "$OUTPUT_PATH" ]] && continue
+    [[ "$(basename "$file")" == "helvetiker_regular.typefaceon" ]] && continue
     MATCHED_FILES+=("$file")
-  done < <(find "$PROJECT_DIR" -type f -name "$pattern" -not -path "*/node_modules/*" -not -path "*/dist/*" -print0)
+  done < <(find "$PROJECT_DIR" -type f -name "$pattern" \
+    -not -path "*/node_modules/*" \
+    -not -path "*/dist/*" \
+    -print0)
 done
 
 # Sort and deduplicate
@@ -46,9 +49,10 @@ unset IFS
 # Dump files into the output
 for FILE in "${MATCHED_FILES[@]}"; do
   REL_PATH="${FILE#$PROJECT_DIR/}"
-  echo -e "\n### $REL_PATH\n\`\`\`${FILE##*.}" >> "$OUTPUT_FILE"
-  cat "$FILE" >> "$OUTPUT_FILE"
-  echo -e "\n\`\`\`" >> "$OUTPUT_FILE"
+  EXT="${FILE##*.}"
+  echo -e "\n### $REL_PATH\n\`\`\`${EXT}" >> "$OUTPUT_PATH"
+  cat "$FILE" >> "$OUTPUT_PATH"
+  echo -e "\n\`\`\`" >> "$OUTPUT_PATH"
 done
 
 echo "✅ Exported ${#MATCHED_FILES[@]} files to $OUTPUT_FILE"

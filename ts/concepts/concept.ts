@@ -1,38 +1,60 @@
 import * as BABYLON from 'babylonjs';
-import 'babylonjs-loaders'; // Only necessary if loading specific assets
+import 'babylonjs-loaders';
 import { AdvancedDynamicTexture, TextBlock, Rectangle } from 'babylonjs-gui';
 
+interface ConceptOptions {
+  color?: BABYLON.Color3;
+  label?: string;
+  radius?: number;
+  position?: { x: number; y: number; z: number };
+  camera?: BABYLON.Camera;
+  engine?: BABYLON.Engine;
+}
+
 class Concept {
-  constructor(scene, options) {
+  scene: BABYLON.Scene;
+  camera?: BABYLON.Camera;
+  engine?: BABYLON.Engine;
+  color: BABYLON.Color3;
+  label: string;
+  radius: number;
+  position: BABYLON.Vector3;
+  labelCount: number = 2;
+  sphere: BABYLON.Mesh;
+  textBox: TextBlock;
+  labelPlanes: BABYLON.Mesh[] = [];
+
+  constructor(scene: BABYLON.Scene, options: ConceptOptions = {}) {
     this.scene = scene;
     this.color = options.color || BABYLON.Color3.Red();
     this.label = options.label || '';
-    this.labelCount = 2;
-    this.radius = options.radius || 1;
-    this.position = new BABYLON.Vector3(options.position.x, options.position.y, options.position.z);
+    this.radius = options.radius ?? 1;
+    const pos = options.position || { x: 0, y: 0, z: 0 };
+    this.position = new BABYLON.Vector3(pos.x, pos.y, pos.z);
     this.camera = options.camera;
-    this.engine = options.engine; // Assuming engine is passed instead of renderer
+    this.engine = options.engine;
 
-    // Create sphere geometry and material
-    this.sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {diameter: this.radius * 2, segments: 64}, this.scene);
+    // Create sphere
+    this.sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {
+      diameter: this.radius * 2,
+      segments: 64
+    }, this.scene);
     this.sphere.material = new BABYLON.StandardMaterial("sphereMat", this.scene);
     this.sphere.material.diffuseColor = this.color;
     this.sphere.position = this.position;
 
-    // Add labels to the sphere
+    // Add label planes and GUI
     this.addLabels();
-
-    // Create a text box
-    this.createTextBox();
+    // this.createTextBox();
   }
 
-  addLabels() {
+  private addLabels(): void {
     const textureSize = 1024;
     const texture = new AdvancedDynamicTexture("LabelTexture", textureSize, textureSize, this.scene);
     const text = new TextBlock();
     text.text = this.label;
     text.color = "white";
-    text.fontSize = 200; // Adjust size based on the size of the sphere
+    text.fontSize = 200;
     texture.addControl(text);
 
     for (let i = 0; i < this.labelCount; i++) {
@@ -42,16 +64,16 @@ class Concept {
 
       const labelPlane = BABYLON.MeshBuilder.CreatePlane("labelPlane", { size: this.radius }, this.scene);
       labelPlane.position.set(x, 0, z);
-      labelPlane.lookAt(this.scene.activeCamera.position);
       labelPlane.material = new BABYLON.StandardMaterial("labelMat", this.scene);
       labelPlane.material.diffuseTexture = texture;
       labelPlane.material.useAlphaFromDiffuseTexture = true;
+
+      this.labelPlanes.push(labelPlane);
       this.sphere.addChild(labelPlane);
     }
   }
 
-  createTextBox() {
-    // GUI for text box
+  private createTextBox(): void {
     const advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
     const rect = new Rectangle();
     rect.width = "220px";
@@ -66,22 +88,26 @@ class Concept {
     label.text = "";
     label.color = "white";
     rect.addControl(label);
+
     this.textBox = label;
-
-    // Position adjustment will need to account for Babylon.js GUI layout specifics
   }
 
-  updateTextBoxPosition() {
-    // Similar logic, adapted for Babylon.js's camera and viewport handling
+  private updateTextBoxPosition(): void {
+    // Placeholder for actual camera-to-GUI alignment logic
   }
 
-  update() {
-    // Rotate the sphere for a dynamic effect
+  public update(): void {
     this.sphere.rotation.y += 0.01;
 
-    // Update text box position
+    // Update labels to face camera
+    if (this.camera) {
+      this.labelPlanes.forEach(plane => {
+        plane.lookAt(this.camera!.position);
+      });
+    }
+
     this.updateTextBoxPosition();
   }
 }
 
-export { Concept };
+export { Concept, ConceptOptions };

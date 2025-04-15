@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "rootDir": "ts",
     "target": "ES6",
     "module": "ESNext",
     "moduleResolution": "Node",
@@ -7,5 +8,6 @@
     "esModuleInterop": true,
     "jsx": "preserve",
     "skipLibCheck": true
-  }
+  },
+  "exclude": ["../../node_modules", "node_modules", "dist"]
 }
