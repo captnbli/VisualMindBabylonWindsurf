@@ -1,60 +1,52 @@
-import * as THREE from 'three';
-import Answer from './concepts/answer.js';  // Ensure the path is correct
+import * as BABYLON from 'babylonjs';
+import 'babylonjs-loaders'; // If using any specific loaders
+import Answer from './concepts/answer.js';
+import Question from './concepts/question.js';
+import ModeController from './mode_controller.js';
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.z = 30;
+// Get the canvas DOM element
+const canvas = document.getElementById('renderCanvas');
 
-const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
+// Load the 3D engine
+const engine = new BABYLON.Engine(canvas, true);
 
-const canvas = renderer.domElement;
-canvas.addEventListener('mousedown', onDocumentMouseDown, false);
+// CreateScene function that creates and return the scene
+const createScene = function() {
+    // Create a basic BJS Scene object
+    const scene = new BABYLON.Scene(engine);
 
-document.body.appendChild(renderer.domElement);
+    // Create an orthographic camera
+    const camera = new BABYLON.UniversalCamera('UniversalCamera', new BABYLON.Vector3(0, 0, -50), scene);
+    camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+    const aspect = window.innerWidth / window.innerHeight;
+    camera.orthoLeft = -20 * aspect;
+    camera.orthoRight = 20 * aspect;
+    camera.orthoTop = 20;
+    camera.orthoBottom = -20;
 
-const light = new THREE.PointLight(0xffffff, 5, 100);
-light.position.set(0, 1, 2.5);
-scene.add(light);
+    // Attach the camera to the canvas
+    camera.attachControl(canvas, false);
 
-const answer = new Answer(scene);
+    // Create a basic light
+    const light = new BABYLON.HemisphericLight('hemiLight', new BABYLON.Vector3(5, 10, 50), scene);
+    light.intensity = 5;
 
-function animate() {
-    requestAnimationFrame(animate);
-    answer.update();
-    renderer.render(scene, camera);
-}
+    // Initialize ModeController
+    ModeController.init({ scene, camera });
 
-animate();
+    return scene;
+};
 
-function onDocumentMouseDown(event) {
-    event.preventDefault();
+// Call the createScene function
+const scene = createScene();
 
-    const mouse = new THREE.Vector2();
-    const raycaster = new THREE.Raycaster();
-    const bounds = renderer.domElement.getBoundingClientRect();
+// Register a render loop to repeatedly render the scene
+engine.runRenderLoop(function () {
+    ModeController.updateObjects(); // Update all objects created by ModeController
+    scene.render();
+});
 
-    // Calculate mouse position in normalized device coordinates (-1 to +1) for both components
-    mouse.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
-    mouse.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
-
-    // Update the picking ray with the camera and mouse position
-    raycaster.setFromCamera(mouse, camera);
-
-    // Calculate objects intersecting the picking ray
-    const intersects = raycaster.intersectObjects(scene.children);
-
-    let pos;
-    if (intersects.length > 0) {
-        // Use the point of the first intersected object
-        pos = intersects[0].point;
-    } else {
-        // Alternatively, use default depth (z = 0) if no object is intersected
-        pos = raycaster.ray.at(0, new THREE.Vector3());
-        pos.z = 0;  // Set depth to 0 if you need to place it at z = 0
-    }
-
-    // Create an Answer instance at the clicked position
-    const answer = new Answer(scene, pos);  // Assuming color and type are predefined
-    scene.add(answer.mesh);
-}
+// Watch for browser/canvas resize events
+window.addEventListener('resize', function() {
+    engine.resize();
+});

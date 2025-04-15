@@ -1,77 +1,87 @@
-import * as THREE from 'three';
-import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
-import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import * as BABYLON from 'babylonjs';
+import 'babylonjs-loaders'; // Only necessary if loading specific assets
+import { AdvancedDynamicTexture, TextBlock, Rectangle } from 'babylonjs-gui';
 
-export default class Concept {
-    constructor(scene, type, color = 0xffffff, position = new THREE.Vector3()) {
-        this.scene = scene;
-        this.type = type;
-        this.color = color;
-        this.radius = 1;  // Set the radius of the sphere
+class Concept {
+  constructor(scene, options) {
+    this.scene = scene;
+    this.color = options.color || BABYLON.Color3.Red();
+    this.label = options.label || '';
+    this.labelCount = 2;
+    this.radius = options.radius || 1;
+    this.position = new BABYLON.Vector3(options.position.x, options.position.y, options.position.z);
+    this.camera = options.camera;
+    this.engine = options.engine; // Assuming engine is passed instead of renderer
 
-        this.initMesh();
-        if (position) {
-            this.mesh.position.copy(position);
-        }
+    // Create sphere geometry and material
+    this.sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {diameter: this.radius * 2, segments: 64}, this.scene);
+    this.sphere.material = new BABYLON.StandardMaterial("sphereMat", this.scene);
+    this.sphere.material.diffuseColor = this.color;
+    this.sphere.position = this.position;
+
+    // Add labels to the sphere
+    this.addLabels();
+
+    // Create a text box
+    this.createTextBox();
+  }
+
+  addLabels() {
+    const textureSize = 1024;
+    const texture = new AdvancedDynamicTexture("LabelTexture", textureSize, textureSize, this.scene);
+    const text = new TextBlock();
+    text.text = this.label;
+    text.color = "white";
+    text.fontSize = 200; // Adjust size based on the size of the sphere
+    texture.addControl(text);
+
+    for (let i = 0; i < this.labelCount; i++) {
+      const angle = (i / this.labelCount) * Math.PI * 2;
+      const x = Math.cos(angle) * (this.radius + 0.1);
+      const z = Math.sin(angle) * (this.radius + 0.1);
+
+      const labelPlane = BABYLON.MeshBuilder.CreatePlane("labelPlane", { size: this.radius }, this.scene);
+      labelPlane.position.set(x, 0, z);
+      labelPlane.lookAt(this.scene.activeCamera.position);
+      labelPlane.material = new BABYLON.StandardMaterial("labelMat", this.scene);
+      labelPlane.material.diffuseTexture = texture;
+      labelPlane.material.useAlphaFromDiffuseTexture = true;
+      this.sphere.addChild(labelPlane);
     }
+  }
 
-    initMesh() {
-        const geometry = new THREE.SphereGeometry(this.radius, 32, 32);  // Use this.radius
-        const material = new THREE.MeshStandardMaterial({ color: this.color });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.scene.add(this.mesh);
+  createTextBox() {
+    // GUI for text box
+    const advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
+    const rect = new Rectangle();
+    rect.width = "220px";
+    rect.height = "100px";
+    rect.cornerRadius = 20;
+    rect.color = "White";
+    rect.thickness = 4;
+    rect.background = "green";
+    advancedTexture.addControl(rect);
 
-        this.addLabel();
-    }
+    const label = new TextBlock();
+    label.text = "";
+    label.color = "white";
+    rect.addControl(label);
+    this.textBox = label;
 
-    addLabel() {
-        const loader = new FontLoader();
-        loader.load('./assets/helvetiker_regular.typeface.json', (font) => {
-            const textGeometry = new TextGeometry(this.type.charAt(0), {
-                font: font,
-                size: 0.25,
-                depth: 0.05,
-                curveSegments: 12,
-                bevelEnabled: true,
-                bevelThickness: 0.01,
-                bevelSize: 0.02,
-                bevelSegments: 5
-            });
+    // Position adjustment will need to account for Babylon.js GUI layout specifics
+  }
 
-            textGeometry.computeBoundingBox();
-            textGeometry.computeBoundingSphere();
-            
-            const textMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            
-            // Create and position the front text mesh
-            const frontTextMesh = new THREE.Mesh(textGeometry, textMaterial);
-            frontTextMesh.position.set(
-                0,
-                0,
-                this.radius  // Slightly offset from the sphere surface
-            );
-            frontTextMesh.rotation.y = Math.PI;
+  updateTextBoxPosition() {
+    // Similar logic, adapted for Babylon.js's camera and viewport handling
+  }
 
-            // Create and position the rear text mesh
-            const rearTextMesh = new THREE.Mesh(textGeometry.clone(), textMaterial);
-            rearTextMesh.position.set(
-                0,
-                0,
-                -(this.radius)  // Slightly offset from the sphere surface
-            );
-            rearTextMesh.rotation.y = 0; // Ensures it faces outward
+  update() {
+    // Rotate the sphere for a dynamic effect
+    this.sphere.rotation.y += 0.01;
 
-            // Add both text meshes to the sphere's mesh
-            this.mesh.add(frontTextMesh);
-            this.mesh.add(rearTextMesh);
-        }, undefined, (error) => {
-            console.error('Font could not be loaded.', error);
-        });
-    }
-
-    update() {
-        if (this.mesh) {
-            this.mesh.rotation.y += 0.01;
-        }
-    }
+    // Update text box position
+    this.updateTextBoxPosition();
+  }
 }
+
+export { Concept };

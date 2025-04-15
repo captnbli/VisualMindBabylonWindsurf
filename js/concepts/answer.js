@@ -1,9 +1,11 @@
-import Concept from './concept.js';
-import { Types } from './types.js';  // Ensure the path is correct
+import { Concept } from './concept.js';
 
-export default class Answer extends Concept {
-    constructor(scene, pos) {
-        super(scene, Types.Answer, 0xFFD700, pos);
-        // Modify default properties specific to Answer
-    }
+class Answer extends Concept {
+  constructor(scene, options = {}) {
+    options.color = new BABYLON.Color3(1, 0.84, 0); // Set color to gold
+    options.label = 'A'; // Set label to 'A'
+    super(scene, options); // Call the superclass constructor with modified options
+  }
 }
+
+export default Answer;

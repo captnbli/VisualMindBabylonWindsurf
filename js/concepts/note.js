@@ -1,8 +1,12 @@
-import Concept from './Concept.js';
-import { Types } from './Types.js';
+import { Concept } from './concept.js';
 
 export default class Note extends Concept {
     constructor(scene) {
-        super(scene, Types.Note, 0xA52A2A);
+        const options = {
+            color: new BABYLON.Color3(0.647, 0.165, 0.165), // Convert hex color #A52A2A to RGB normalized
+            label: 'N', // Assumed label for Note
+            // Include other default options as needed
+        };
+        super(scene, options);
     }
 }
