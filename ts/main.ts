@@ -1,52 +1,52 @@
 import * as BABYLON from 'babylonjs';
-import 'babylonjs-loaders';
-
-import Answer from './concepts/answer';
-import Question from './concepts/question';
 import ModeController from './mode_controller';
 
-// Get the canvas DOM element and assert type
-const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
-
-// Load the Babylon engine
-const engine = new BABYLON.Engine(canvas, true);
-
-// Create and return the Babylon scene
-const createScene = (): BABYLON.Scene => {
+function createScene(engine: BABYLON.Engine): BABYLON.Scene {
   const scene = new BABYLON.Scene(engine);
-  scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); // RGBA: pure black
+  scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); // black background
 
-  // Create an orthographic camera
-  const camera = new BABYLON.UniversalCamera('UniversalCamera', new BABYLON.Vector3(0, 0, -50), scene);
+  // Create orthographic camera at Z = -100
+  const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 0, -100), scene);
+
+  // Set camera near/far planes to ensure all objects are visible
+  camera.minZ = 0.1;
+  camera.maxZ = 1000;
+
+  // Target a point 20 units in front (where concepts will be placed)
+  const conceptZ = -80;
+  camera.setTarget(new BABYLON.Vector3(0, 0, conceptZ));
+  camera.upVector = new BABYLON.Vector3(0, 1, 0);
   camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
-  const aspect = window.innerWidth / window.innerHeight;
-  camera.orthoLeft = -20 * aspect;
-  camera.orthoRight = 20 * aspect;
-  camera.orthoTop = 20;
-  camera.orthoBottom = -20;
-  camera.attachControl(canvas, false);
 
-  // Create a light
-  const light = new BABYLON.HemisphericLight('hemiLight', new BABYLON.Vector3(5, 10, 50), scene);
-  light.intensity = 5;
 
-  // Initialize controller
+  // Set orthographic bounds based on screen size
+  const setOrthoBounds = () => {
+    const aspect = engine.getRenderWidth() / engine.getRenderHeight();
+    const size = 50;
+    camera.orthoLeft = -size * aspect;
+    camera.orthoRight = size * aspect;
+    camera.orthoTop = size;
+    camera.orthoBottom = -size;
+  };
+
+  setOrthoBounds();
+  window.addEventListener("resize", () => {
+    engine.resize();
+    setOrthoBounds();
+  });
+
+  // Initialize mode controller
   ModeController.init({ scene, camera, engine });
-  ModeController.setMode('answer'); // or: Types.Answer
-  
+
   return scene;
-};
+}
 
-// Set up the scene
-const scene = createScene();
 
-// Start render loop
+const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
+const engine = new BABYLON.Engine(canvas, true);
+const scene = createScene(engine);
+
 engine.runRenderLoop(() => {
   ModeController.updateObjects();
   scene.render();
-});
-
-// Handle browser resizes
-window.addEventListener('resize', () => {
-  engine.resize();
 });

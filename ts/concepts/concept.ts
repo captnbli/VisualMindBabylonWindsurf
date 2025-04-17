@@ -6,7 +6,7 @@ interface ConceptOptions {
   color?: BABYLON.Color3;
   label?: string;
   radius?: number;
-  position?: { x: number; y: number; z: number };
+  position?: BABYLON.Vector3;
   camera?: BABYLON.Camera;
   engine?: BABYLON.Engine;
 }
@@ -21,28 +21,31 @@ class Concept {
   position: BABYLON.Vector3;
   labelCount: number = 2;
   sphere: BABYLON.Mesh;
-  textBox: TextBlock;
+  // textBox: TextBlock;
   labelPlanes: BABYLON.Mesh[] = [];
 
   constructor(scene: BABYLON.Scene, options: ConceptOptions = {}) {
     this.scene = scene;
     this.color = options.color || BABYLON.Color3.Red();
     this.label = options.label || '';
-    this.radius = options.radius ?? 1;
-    const pos = options.position || { x: 0, y: 0, z: 0 };
-    this.position = new BABYLON.Vector3(pos.x, pos.y, pos.z);
+    this.radius = options.radius ?? 5;
+    this.position = options.position ?? new BABYLON.Vector3(0, 0, 0);
     this.camera = options.camera;
     this.engine = options.engine;
 
-    // Create sphere
+    // Create sphere using per-type color and radius
     this.sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {
       diameter: this.radius * 2,
       segments: 64
     }, this.scene);
-    this.sphere.material = new BABYLON.StandardMaterial("sphereMat", this.scene);
-    this.sphere.material.diffuseColor = this.color;
-    this.sphere.position = this.position;
 
+    // Use the color provided by the concept type
+    const mat = new BABYLON.StandardMaterial("mat", this.scene);
+    mat.diffuseColor = this.color;
+    mat.emissiveColor = this.color;
+    this.sphere.material = mat;
+    this.sphere.position = this.position;
+    console.log("[CONCEPT] Created sphere at", this.position.toString());
     // Add label planes and GUI
     this.addLabels();
     // this.createTextBox();

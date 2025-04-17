@@ -1,5 +1,6 @@
 import * as BABYLON from 'babylonjs';
 
+import type { Concept } from './concept';
 import Answer from './answer';
 import Question from './question';
 import Note from './note';
@@ -9,11 +10,10 @@ import Link from './link';
 import Reference from './reference';
 
 import { Mode, Types } from './types';
-
 type ConceptConstructor = new (
   scene: BABYLON.Scene,
   options?: Record<string, any>
-) => unknown;
+) => Concept;
 
 export const ConceptMap: Record<Mode, ConceptConstructor> = {
   [Types.Answer]: Answer,
