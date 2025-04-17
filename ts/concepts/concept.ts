@@ -39,12 +39,11 @@ class Concept {
       segments: 64
     }, this.scene);
 
-    // Use a metallic PBR material for a 3D, metallic look
+    // Use PBRMetallicRoughnessMaterial for realistic 3D shading
     const mat = new BABYLON.PBRMetallicRoughnessMaterial("mat", this.scene);
     mat.baseColor = this.color;
-    mat.metallic = 0.9; // High metallic for shiny look
-    mat.roughness = 0.2; // Low roughness for reflectivity
-    // Optionally add environment texture for more realism
+    mat.metallic = 0.5; // Moderate metallic for realistic shading
+    mat.roughness = 0.5; // Moderate roughness for visible shading
     if (this.scene.environmentTexture) {
       mat.environmentTexture = this.scene.environmentTexture;
     }

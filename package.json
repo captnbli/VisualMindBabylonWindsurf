@@ -1,0 +1,19 @@
+{
+  "name": "visual-mind-babylon-windsurf",
+  "version": "1.0.0",
+  "description": "A Babylon.js 3D visualization app for concept spheres.",
+  "main": "ts/main.ts",
+  "scripts": {
+    "start": "parcel ts/main.ts",
+    "build": "parcel build ts/main.ts"
+  },
+  "dependencies": {
+    "@babylonjs/core": "latest",
+    "@babylonjs/gui": "latest",
+    "@babylonjs/materials": "latest"
+  },
+  "devDependencies": {
+    "parcel": "latest",
+    "typescript": "latest"
+  }
+}

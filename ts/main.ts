@@ -5,18 +5,17 @@ function createScene(engine: BABYLON.Engine): BABYLON.Scene {
   const scene = new BABYLON.Scene(engine);
   scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); // black background
 
-  // Move camera further away at Z = -200
-  const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 0, -200), scene);
-
-  // Set camera near/far planes to ensure all objects are visible
+  // Use a perspective ArcRotateCamera for more realistic 3D
+  const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2.5, 200, BABYLON.Vector3.Zero(), scene);
+  camera.attachControl(engine.getRenderingCanvas(), true);
   camera.minZ = 0.1;
   camera.maxZ = 2000;
 
-  // Target a point 20 units in front (where concepts will be placed)
-  const conceptZ = -180;
-  camera.setTarget(new BABYLON.Vector3(0, 0, conceptZ));
-  camera.upVector = new BABYLON.Vector3(0, 1, 0);
-  camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+  // Optionally, limit zoom and angles for usability
+  camera.lowerRadiusLimit = 50;
+  camera.upperRadiusLimit = 1000;
+  camera.lowerBetaLimit = 0.1;
+  camera.upperBetaLimit = Math.PI - 0.1;
 
 
   // Set orthographic bounds based on screen size (double the size for larger objects)
@@ -36,10 +35,26 @@ function createScene(engine: BABYLON.Engine): BABYLON.Scene {
   });
 
   // Add a sun-like directional light: very far away, extremely bright, pointing toward the origin
-  const sunDirection = new BABYLON.Vector3(0, -1, 1).normalize(); // Sun above and behind camera
-  const dirLight = new BABYLON.DirectionalLight("dirLight", sunDirection, scene);
-  dirLight.position = new BABYLON.Vector3(0, 10000, -10000); // Very far away
+  // Create a directional light that will follow the camera
+  const dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(0, -1, 1), scene);
   dirLight.intensity = 100.0;
+
+  // Helper: offset for the sun relative to the camera (behind and above)
+  const sunOffset = new BABYLON.Vector3(0, 20, -40);
+
+  // Update sun position/direction each frame so it always follows the camera
+  scene.registerBeforeRender(() => {
+    // Compute the camera's forward direction
+    const forward = camera.getDirection(new BABYLON.Vector3(0, 0, 1));
+    // Compute the "behind and above" position
+    const sunPos = camera.position
+      .add(forward.scale(-sunOffset.z)) // behind camera
+      .add(new BABYLON.Vector3(0, sunOffset.y, 0)); // above camera
+    dirLight.position.copyFrom(sunPos);
+    // Point the light in the same direction the camera is looking (with a slight downward tilt)
+    const sunDir = forward.add(new BABYLON.Vector3(0, -0.2, 0)).normalize();
+    dirLight.direction.copyFrom(sunDir);
+  });
 
   // Optionally, reduce hemispheric light to near zero for a more sun-dominated look
   const hemiLight = new BABYLON.HemisphericLight("hemiLight", new BABYLON.Vector3(0, 1, 0), scene);
@@ -57,6 +72,12 @@ function createScene(engine: BABYLON.Engine): BABYLON.Scene {
       scene.environmentIntensity = 1.5;
     }
   );
+
+  // Enable tone mapping and gamma correction for more realistic rendering
+  scene.imageProcessingConfiguration.toneMappingEnabled = true;
+  scene.imageProcessingConfiguration.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
+  scene.imageProcessingConfiguration.exposure = 1.0;
+  scene.imageProcessingConfiguration.gammaCorrection = true;
 
   // Initialize mode controller
   ModeController.init({ scene, camera, engine });
