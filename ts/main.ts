@@ -6,8 +6,87 @@ function createScene(engine: BABYLON.Engine): BABYLON.Scene {
   scene.clearColor = new BABYLON.Color4(0, 0, 0, 1); // black background
 
   // Use a perspective ArcRotateCamera for more realistic 3D
-  const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2.5, 200, BABYLON.Vector3.Zero(), scene);
-  camera.attachControl(engine.getRenderingCanvas(), true);
+  const camera = new BABYLON.ArcRotateCamera("camera", Math.PI / 2, Math.PI / 2.5, 600, BABYLON.Vector3.Zero(), scene);
+  // Remove all default camera inputs
+  camera.inputs.clear();
+
+  // Remove all default camera inputs (including orbit on right mouse)
+  camera.inputs.clear();
+
+  // Add mouse wheel for zoom
+  camera.inputs.addMouseWheel();
+
+  // Restrict camera controls to x/y plane and zoom only
+  camera.panningSensibility = 0; // Disable built-in panning
+  camera.allowUpsideDown = false; // Prevent flipping
+  camera.lowerBetaLimit = Math.PI / 2.5 - 0.01; // Lock beta to a narrow range around initial value
+  camera.upperBetaLimit = Math.PI / 2.5 + 0.01;
+
+  // Custom right mouse drag to pan (slide) the camera's view
+  let isRightDragging = false;
+  let panStartPointerX = 0;
+  let panStartPointerY = 0;
+  let panStartTarget = new BABYLON.Vector3();
+  let panStartCameraPos = new BABYLON.Vector3();
+  const canvas = engine.getRenderingCanvas();
+  if (canvas) {
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) {
+        isRightDragging = true;
+        panStartPointerX = e.clientX;
+        panStartPointerY = e.clientY;
+        panStartTarget.copyFrom(camera.target);
+        panStartCameraPos.copyFrom(camera.position);
+        e.preventDefault();
+      }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (isRightDragging) {
+        // Project pointer movement to world-space movement on the camera's view plane at the target depth
+        const scene = camera.getScene();
+        const pickPlaneNormal = camera.getForwardRay().direction;
+        const plane = BABYLON.Plane.FromPositionAndNormal(panStartTarget, pickPlaneNormal);
+
+        // Get world point under initial pointer
+        const ray0 = scene.createPickingRay(
+          panStartPointerX,
+          panStartPointerY,
+          BABYLON.Matrix.Identity(),
+          camera
+        );
+        const dist0 = ray0.intersectsPlane(plane);
+        const world0 = dist0 == null ? panStartTarget : ray0.origin.add(ray0.direction.scale(dist0));
+
+        // Get world point under current pointer
+        const ray1 = scene.createPickingRay(
+          e.clientX,
+          e.clientY,
+          BABYLON.Matrix.Identity(),
+          camera
+        );
+        const dist1 = ray1.intersectsPlane(plane);
+        const world1 = dist1 == null ? panStartTarget : ray1.origin.add(ray1.direction.scale(dist1));
+
+        // Compute world-space translation
+        const delta = world0.subtract(world1);
+        camera.target.copyFrom(panStartTarget.add(delta));
+        camera.position.copyFrom(panStartCameraPos.add(delta));
+        e.preventDefault();
+      }
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      if (e.button === 2) {
+        isRightDragging = false;
+        e.preventDefault();
+      }
+    });
+  }
+  // Optionally, you can set camera.inertia = 0 for instant stops
+  // camera.inertia = 0;
+
+  // Optionally, if you want to lock beta exactly:
+  // camera.lowerBetaLimit = camera.upperBetaLimit = Math.PI / 2.5;
+
   camera.minZ = 0.1;
   camera.maxZ = 2000;
 
@@ -17,22 +96,8 @@ function createScene(engine: BABYLON.Engine): BABYLON.Scene {
   camera.lowerBetaLimit = 0.1;
   camera.upperBetaLimit = Math.PI - 0.1;
 
-
-  // Set orthographic bounds based on screen size (double the size for larger objects)
-  const setOrthoBounds = () => {
-    const aspect = engine.getRenderWidth() / engine.getRenderHeight();
-    const size = 100;
-    camera.orthoLeft = -size * aspect;
-    camera.orthoRight = size * aspect;
-    camera.orthoTop = size;
-    camera.orthoBottom = -size;
-  };
-
-  setOrthoBounds();
-  window.addEventListener("resize", () => {
-    engine.resize();
-    setOrthoBounds();
-  });
+  // Attach camera controls to the canvas for pointer input
+  camera.attachControl(engine.getRenderingCanvas(), true);
 
   // Add a sun-like directional light: very far away, extremely bright, pointing toward the origin
   // Create a directional light that will follow the camera
@@ -87,6 +152,8 @@ function createScene(engine: BABYLON.Engine): BABYLON.Scene {
 
 
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
+// Disable right-click context menu so Babylon camera orbit works
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 const engine = new BABYLON.Engine(canvas, true);
 const scene = createScene(engine);
 

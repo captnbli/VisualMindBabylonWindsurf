@@ -71,7 +71,12 @@ class ModeController {
 
   private attachEventListeners(): void {
     window.addEventListener('keydown', (event) => this.handleKeydown(event));
-    this.engine.getRenderingCanvas()?.addEventListener('pointerdown', (event) => this.handleMouseDown(event), false);
+    const canvas = this.engine.getRenderingCanvas();
+    if (canvas) {
+      canvas.addEventListener('pointerdown', (event) => this.handleMouseDown(event), false);
+      canvas.addEventListener('pointermove', (event) => this.handlePointerMove(event), false);
+      canvas.addEventListener('pointerup', (event) => this.handlePointerUp(event), false);
+    }
     window.addEventListener('resize', () => this.handleWindowResize());
   }
 
@@ -86,8 +91,29 @@ class ModeController {
   }
 
   private handleMouseDown(event: PointerEvent): void {
+    // Only respond to left mouse button (0 = left, 1 = middle, 2 = right)
+    if (event.button !== 0) return;
     event.preventDefault();
+    event.stopPropagation();
 
+    // Pick mesh under pointer
+    const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => {
+      // Only pick spheres (Concepts)
+      return mesh && mesh.name.startsWith('sphere');
+    });
+
+    if (pickResult && pickResult.hit && pickResult.pickedMesh) {
+      // Select the sphere for dragging
+      this.selectedObject = pickResult.pickedMesh as BABYLON.AbstractMesh;
+      this._dragging = true;
+      this._dragOffset = pickResult.pickedPoint ? pickResult.pickedPoint.subtract(this.selectedObject.position) : BABYLON.Vector3.Zero();
+      // Set drag plane to go through the sphere's original position, perpendicular to camera's forward
+      this._dragPlaneOrigin = this.selectedObject.position.clone();
+      this._dragPlaneNormal = this.camera.getForwardRay().direction.normalize();
+      return;
+    }
+
+    // Otherwise, create a new concept at the pointer position
     let pos: BABYLON.Vector3 | null = null;
     const canvas = this.engine.getRenderingCanvas();
     if (this.camera.mode === BABYLON.Camera.ORTHOGRAPHIC_CAMERA && canvas) {
@@ -97,24 +123,17 @@ class ModeController {
       const pointerY = event.clientY - rect.top;
       const ndcX = (pointerX / canvas.width) * 2 - 1; // [-1, 1]
       const ndcY = 1 - (pointerY / canvas.height) * 2; // [1, -1]
-
-      // Get ortho bounds
       const orthoLeft = (this.camera as any).orthoLeft;
       const orthoRight = (this.camera as any).orthoRight;
       const orthoTop = (this.camera as any).orthoTop;
       const orthoBottom = (this.camera as any).orthoBottom;
       const worldX = orthoLeft + (ndcX + 1) * (orthoRight - orthoLeft) / 2;
       const worldY = orthoBottom + (ndcY + 1) * (orthoTop - orthoBottom) / 2;
-      // Place at 20 units in front of camera (Z = camera.position.z + 20 * forward.z)
       const forward = this.camera.getForwardRay().direction.normalize();
       const worldZ = this.camera.position.z + 20 * forward.z;
       pos = new BABYLON.Vector3(worldX, worldY, worldZ);
-      console.log("[ORTHO] pointerX, pointerY:", pointerX, pointerY);
-      console.log("[ORTHO] ndcX, ndcY:", ndcX, ndcY);
-      console.log("[ORTHO] ortho bounds:", orthoLeft, orthoRight, orthoTop, orthoBottom);
-      console.log("[ORTHO] Computed world position:", pos.toString());
     } else {
-      // Fallback for perspective or other cameras: use ray-plane intersection
+      // Perspective: ray-plane intersection
       const ray = this.scene.createPickingRay(
         this.scene.pointerX,
         this.scene.pointerY,
@@ -125,44 +144,58 @@ class ModeController {
       const planeOrigin = this.camera.position.add(forward.scale(20));
       const plane = BABYLON.Plane.FromPositionAndNormal(planeOrigin, forward);
       const distance = ray.intersectsPlane(plane);
-      if (distance == null) {
-        console.warn("Ray did not intersect the placement plane. Placing concept exactly 20 units in front of camera.");
-        pos = planeOrigin.clone();
-      } else {
-        pos = ray.origin.add(ray.direction.scale(distance));
-      }
-      console.log("[PERSPECTIVE] Computed world position:", pos.toString());
+      pos = distance == null ? planeOrigin.clone() : ray.origin.add(ray.direction.scale(distance));
     }
-
-    // TEMP: Add a debug sphere at the placement position
-    const debugSphere = BABYLON.MeshBuilder.CreateSphere("debugSphere", { diameter: 2 }, this.scene);
-    const debugMat = new BABYLON.StandardMaterial("debugMat", this.scene);
-    debugMat.diffuseColor = new BABYLON.Color3(1, 1, 0); // Bright yellow
-    debugSphere.material = debugMat;
-    debugSphere.position = pos;
-    setTimeout(() => {
-      debugSphere.dispose();
-    }, 1000);
 
     const currentMode = this.getMode();
     if (!currentMode || !ConceptMap[currentMode]) {
       console.log("No mode selected or invalid mode.");
       return;
     }
-
     const ConceptClass = ConceptMap[currentMode];
     const createdObject = new ConceptClass(this.scene, {
       position: pos,
       camera: this.camera,
       engine: this.engine
     });
-
     this.objects.push(createdObject);
     this.selectedObject = createdObject.sphere;
     console.log(`Created ${currentMode} at`, pos.toString());
   }
     private handleWindowResize(): void {
     this.engine.resize();
+  }
+
+  private _dragging: boolean = false;
+  private _dragOffset: BABYLON.Vector3 = BABYLON.Vector3.Zero();
+  private _dragPlaneOrigin: BABYLON.Vector3 | null = null;
+  private _dragPlaneNormal: BABYLON.Vector3 | null = null;
+
+  private handlePointerMove(event: PointerEvent): void {
+    if (!this._dragging || !this.selectedObject || !this._dragPlaneOrigin || !this._dragPlaneNormal) return;
+    // Move selected object to new pointer position (keep offset)
+    const ray = this.scene.createPickingRay(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      BABYLON.Matrix.Identity(),
+      this.camera
+    );
+    const plane = BABYLON.Plane.FromPositionAndNormal(this._dragPlaneOrigin, this._dragPlaneNormal);
+    const distance = ray.intersectsPlane(plane);
+    const newPos = distance == null ? this._dragPlaneOrigin.clone() : ray.origin.add(ray.direction.scale(distance));
+    if (newPos) {
+      this.selectedObject.position.copyFrom(newPos.subtract(this._dragOffset));
+    }
+  }
+
+  private handlePointerUp(event: PointerEvent): void {
+    if (this._dragging) {
+      this._dragging = false;
+      this._dragOffset = BABYLON.Vector3.Zero();
+      this._dragPlaneOrigin = null;
+      this._dragPlaneNormal = null;
+    }
+    this.selectedObject = null;
   }
 
   updateObjects(): void {

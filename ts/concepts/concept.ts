@@ -28,7 +28,7 @@ class Concept {
     this.scene = scene;
     this.color = options.color || BABYLON.Color3.Red();
     this.label = options.label || '';
-    this.radius = options.radius ?? 10;
+    this.radius = options.radius ?? 1;
     this.position = options.position ?? new BABYLON.Vector3(0, 0, 0);
     this.camera = options.camera;
     this.engine = options.engine;
@@ -52,6 +52,7 @@ class Concept {
     console.log("[CONCEPT] Created metallic sphere at", this.position.toString());
     // Add label planes and GUI
     this.addLabels();
+    this.sphere.refreshBoundingInfo(true);
     // this.createTextBox();
   }
 
