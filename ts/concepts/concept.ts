@@ -28,7 +28,7 @@ class Concept {
     this.scene = scene;
     this.color = options.color || BABYLON.Color3.Red();
     this.label = options.label || '';
-    this.radius = options.radius ?? 5;
+    this.radius = options.radius ?? 10;
     this.position = options.position ?? new BABYLON.Vector3(0, 0, 0);
     this.camera = options.camera;
     this.engine = options.engine;
@@ -39,13 +39,18 @@ class Concept {
       segments: 64
     }, this.scene);
 
-    // Use the color provided by the concept type
-    const mat = new BABYLON.StandardMaterial("mat", this.scene);
-    mat.diffuseColor = this.color;
-    mat.emissiveColor = this.color;
+    // Use a metallic PBR material for a 3D, metallic look
+    const mat = new BABYLON.PBRMetallicRoughnessMaterial("mat", this.scene);
+    mat.baseColor = this.color;
+    mat.metallic = 0.9; // High metallic for shiny look
+    mat.roughness = 0.2; // Low roughness for reflectivity
+    // Optionally add environment texture for more realism
+    if (this.scene.environmentTexture) {
+      mat.environmentTexture = this.scene.environmentTexture;
+    }
     this.sphere.material = mat;
     this.sphere.position = this.position;
-    console.log("[CONCEPT] Created sphere at", this.position.toString());
+    console.log("[CONCEPT] Created metallic sphere at", this.position.toString());
     // Add label planes and GUI
     this.addLabels();
     // this.createTextBox();
