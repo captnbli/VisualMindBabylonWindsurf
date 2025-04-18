@@ -1,46 +1,46 @@
-import * as BABYLON from 'babylonjs';
-import 'babylonjs-loaders';
-import { AdvancedDynamicTexture, TextBlock, Rectangle } from 'babylonjs-gui';
+import { Engine, Scene, Color3, Vector3, Camera, Mesh, MeshBuilder, StandardMaterial, PBRMetallicRoughnessMaterial } from "babylonjs";
+import { AdvancedDynamicTexture, TextBlock, Rectangle } from "babylonjs/Gui";
+import "babylonjs/Loaders";
 
 interface ConceptOptions {
-  color?: BABYLON.Color3;
+  color?: Color3;
   label?: string;
   radius?: number;
-  position?: BABYLON.Vector3;
-  camera?: BABYLON.Camera;
-  engine?: BABYLON.Engine;
+  position?: Vector3;
+  camera?: Camera;
+  engine?: Engine;
 }
 
 class Concept {
-  scene: BABYLON.Scene;
-  camera?: BABYLON.Camera;
-  engine?: BABYLON.Engine;
-  color: BABYLON.Color3;
+  scene: Scene;
+  camera?: Camera;
+  engine?: Engine;
+  color: Color3;
   label: string;
   radius: number;
-  position: BABYLON.Vector3;
+  position: Vector3;
   labelCount: number = 2;
-  sphere: BABYLON.Mesh;
+  sphere: Mesh;
   // textBox: TextBlock;
-  labelPlanes: BABYLON.Mesh[] = [];
+  labelPlanes: Mesh[] = [];
 
-  constructor(scene: BABYLON.Scene, options: ConceptOptions = {}) {
+  constructor(scene: Scene, options: ConceptOptions = {}) {
     this.scene = scene;
-    this.color = options.color || BABYLON.Color3.Red();
+    this.color = options.color || Color3.Red();
     this.label = options.label || '';
     this.radius = options.radius ?? 1;
-    this.position = options.position ?? new BABYLON.Vector3(0, 0, 0);
+    this.position = options.position ?? new Vector3(0, 0, 0);
     this.camera = options.camera;
     this.engine = options.engine;
 
     // Create sphere using per-type color and radius
-    this.sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {
+    this.sphere = MeshBuilder.CreateSphere("sphere", {
       diameter: this.radius * 2,
       segments: 64
     }, this.scene);
 
     // Use PBRMetallicRoughnessMaterial for realistic 3D shading
-    const mat = new BABYLON.PBRMetallicRoughnessMaterial("mat", this.scene);
+    const mat = new PBRMetallicRoughnessMaterial("mat", this.scene);
     mat.baseColor = this.color;
     mat.metallic = 0.5; // Moderate metallic for realistic shading
     mat.roughness = 0.5; // Moderate roughness for visible shading
@@ -70,11 +70,12 @@ class Concept {
       const x = Math.cos(angle) * (this.radius + 0.1);
       const z = Math.sin(angle) * (this.radius + 0.1);
 
-      const labelPlane = BABYLON.MeshBuilder.CreatePlane("labelPlane", { size: this.radius }, this.scene);
+      const labelPlane = MeshBuilder.CreatePlane("labelPlane", { size: this.radius }, this.scene);
       labelPlane.position.set(x, 0, z);
-      labelPlane.material = new BABYLON.StandardMaterial("labelMat", this.scene);
-      labelPlane.material.diffuseTexture = texture;
-      labelPlane.material.useAlphaFromDiffuseTexture = true;
+      labelPlane.material = new StandardMaterial("labelMat", this.scene);
+      const labelMat = labelPlane.material as StandardMaterial;
+      labelMat.diffuseTexture = texture;
+      labelMat.useAlphaFromDiffuseTexture = true;
 
       this.labelPlanes.push(labelPlane);
       this.sphere.addChild(labelPlane);

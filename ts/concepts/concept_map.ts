@@ -1,4 +1,4 @@
-import * as BABYLON from 'babylonjs';
+import { Engine, Scene, Color3, Vector3, Camera, Mesh } from "babylonjs/Engines/engine";
 
 import type { Concept } from './concept';
 import Answer from './answer';

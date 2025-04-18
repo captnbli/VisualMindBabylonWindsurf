@@ -1,4 +1,4 @@
-import * as BABYLON from 'babylonjs';
+import { Engine, Scene, Color3, Vector3, Camera, Mesh, AbstractMesh } from "babylonjs";
 
 import Answer from './concepts/answer';
 import Question from './concepts/question';
@@ -12,9 +12,9 @@ import { ConceptMap } from './concepts/concept_map';
 import { Mode, Types } from './concepts/types';
 
 interface ModeControllerConfig {
-  scene: BABYLON.Scene;
-  camera: BABYLON.Camera;
-  engine: BABYLON.Engine;
+  scene: Scene;
+  camera: Camera;
+  engine: Engine;
 }
 
 // Define a concept constructor type
@@ -46,11 +46,11 @@ class ModeController {
   };
   
   private mode: Mode | null = null;
-  private scene!: BABYLON.Scene;
-  private camera!: BABYLON.Camera;
-  private engine!: BABYLON.Engine;
+  private scene!: Scene;
+  private camera!: Camera;
+  private engine!: Engine;
   private objects: any[] = [];
-  private selectedObject: BABYLON.AbstractMesh | null = null;
+  private selectedObject: AbstractMesh | null = null;
 
   init({ scene, camera, engine }: ModeControllerConfig): void {
     this.scene = scene;

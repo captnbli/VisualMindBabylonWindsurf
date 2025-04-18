@@ -1,8 +1,9 @@
 import { Concept, ConceptOptions } from './concept';
+import { Color3, Scene } from "babylonjs";
 
 class Question extends Concept {
-  constructor(scene: BABYLON.Scene, options: ConceptOptions = {}) {
-    options.color = new BABYLON.Color3(0, 0, 1); // Set color to blue
+  constructor(scene: Scene, options: ConceptOptions = {}) {
+    options.color = new Color3(0, 0, 1); // Set color to blue
     options.label = 'Q'; // Set label to 'Q'
     super(scene, options); // Call the superclass constructor with modified options
   }
