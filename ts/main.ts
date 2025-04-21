@@ -1,19 +1,26 @@
 import "./set_babylon_global";
-import { Engine } from "babylonjs/Engines/engine";
-import { Scene } from "babylonjs/scene";
-import { Color3, Color4, Vector3, Matrix } from "babylonjs/Maths/math";
-import { Camera, ArcRotateCamera, FreeCamera, TargetCamera } from "babylonjs/Cameras";
-import { Mesh } from "babylonjs/Meshes/mesh";
-import { DirectionalLight, HemisphericLight } from "babylonjs/Lights";
-import { Plane } from "babylonjs/Maths/math.plane";
-import { CubeTexture } from "babylonjs/Materials/Textures/cubeTexture";
-import { ImageProcessingConfiguration } from "babylonjs/Materials/imageProcessingConfiguration";
-import { computeOrthoMatchForPerspective } from '@babylonjs/core/Cameras/perspectiveConverters';
+import { Engine } from "../../Babylon.js/packages/dev/core/dist/Engines/engine";
+import { Scene } from "../../Babylon.js/packages/dev/core/dist/scene";
+import { Color3, Color4, Vector3, Matrix } from "../../Babylon.js/packages/dev/core/dist/Maths/math";
+import { Viewport } from "../../Babylon.js/packages/dev/core/dist/Maths/math.viewport";
+import { Camera, ArcRotateCamera, FreeCamera, TargetCamera } from "../../Babylon.js/packages/dev/core/dist/Cameras";
+import { Mesh } from "../../Babylon.js/packages/dev/core/dist/Meshes/mesh";
+import { DirectionalLight, HemisphericLight } from "../../Babylon.js/packages/dev/core/dist/Lights";
+import { Plane } from "../../Babylon.js/packages/dev/core/dist/Maths/math.plane";
+import { CubeTexture } from "../../Babylon.js/packages/dev/core/dist/Materials/Textures/cubeTexture";
+import { ImageProcessingConfiguration } from "../../Babylon.js/packages/dev/core/dist/Materials/imageProcessingConfiguration";
+import { computeOrthoMatchForPerspective } from "../../Babylon.js/packages/dev/core/dist/Cameras/perspectiveConverters";
 import ModeController from './mode_controller';
 
 function createScene(engine: Engine): Scene {
   const scene = new Scene(engine);
+  // IMPORTANT: Set right-handed system BEFORE creating cameras or meshes
+  scene.useRightHandedSystem = true;
   scene.clearColor = new Color4(0, 0, 0, 1); // black background
+
+  // Add a HemisphericLight for ambient lighting (required for right-handed system)
+  const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, -1, 0), scene);
+  hemiLight.intensity = 0.8;
 
   // Use a perspective ArcRotateCamera for more realistic 3D
   const arcCamera = new ArcRotateCamera("arcCamera", Math.PI / 2, Math.PI / 2.5, 600, Vector3.Zero(), scene);
@@ -46,9 +53,12 @@ function createScene(engine: Engine): Scene {
   // Camera switch function
   function switchCamera(toOrtho: boolean) {
     if (toOrtho) {
+      // Use panStartWorldPoint as the target if available, otherwise fall back to arcCamera.target
+      let focusTarget = (typeof panStartWorldPoint !== 'undefined' && panStartWorldPoint && (panStartWorldPoint.x !== undefined)) ? panStartWorldPoint : arcCamera.target;
+      console.log('[DEBUG] switchCamera: using target for computeOrthoMatchForPerspective:', focusTarget);
       // Directly match ortho camera position, target, and upVector to arcCamera
       orthoCamera.position.copyFrom(arcCamera.position);
-      orthoCamera.setTarget(arcCamera.target.clone());
+      orthoCamera.setTarget(focusTarget.clone());
       if (orthoCamera.upVector && arcCamera.upVector) {
         orthoCamera.upVector.copyFrom(arcCamera.upVector);
       }
@@ -56,20 +66,20 @@ function createScene(engine: Engine): Scene {
         orthoCamera.upVector.copyFrom(arcCamera.upVector);
       }
       // --- Robust ortho match: use Babylon.js computeOrthoMatchForPerspective ---
-      const orthoParams = computeOrthoMatchForPerspective(arcCamera, arcCamera.target, engine);
-      orthoCamera.orthoLeft = orthoParams.orthoLeft;
-      orthoCamera.orthoRight = orthoParams.orthoRight;
-      orthoCamera.orthoTop = orthoParams.orthoTop;
-      orthoCamera.orthoBottom = orthoParams.orthoBottom;
-      orthoCamera.position.copyFrom(orthoParams.position);
-      orthoCamera.setTarget(orthoParams.target);
-      orthoCamera.upVector.copyFrom(orthoParams.upVector);
-      // --- End robust match ---
-      // --- End pixel-perfect match ---
-      if (scene.activeCamera) {
-        scene.activeCamera.detachControl(engine.getRenderingCanvas());
-      }
-      scene.activeCamera = orthoCamera;
+      const orthoParams = computeOrthoMatchForPerspective(arcCamera, focusTarget, engine);
+      console.log('[DEBUG] computeOrthoMatchForPerspective result:', JSON.stringify({
+        orthoLeft: orthoParams.orthoLeft,
+        orthoRight: orthoParams.orthoRight
+      }));
+      console.log('[DEBUG] orthoCamera AFTER switch:', JSON.stringify({
+        position: orthoCamera.position,
+        target: orthoCamera.target,
+        upVector: orthoCamera.upVector,
+        orthoLeft: orthoCamera.orthoLeft,
+        orthoRight: orthoCamera.orthoRight,
+        orthoTop: orthoCamera.orthoTop,
+        orthoBottom: orthoCamera.orthoBottom
+      }));
       scene.activeCamera.attachControl(engine.getRenderingCanvas(), true);
     } else {
       // When returning to arcCamera, try to preserve the same target and distance
@@ -89,13 +99,13 @@ function createScene(engine: Engine): Scene {
     }
   }
 
-  // Custom right mouse drag to pan (slide) the camera's view
+  // Custom right mouse drag to move all objects in world space
   let isRightDragging = false;
   let panStartPointerX = 0;
   let panStartPointerY = 0;
-  let panStartTarget = new Vector3();
-  let panStartCameraPos = new Vector3();
   let panStartWorldPoint = new Vector3();
+  let objectsStartPositions: Vector3[] = [];
+  let objectsStartScreenPositions: { x: number, y: number, z: number }[] = [];
   const canvas = engine.getRenderingCanvas();
   // Helper to always get the current camera (arc or ortho)
   function getActiveCamera(): TargetCamera {
@@ -104,59 +114,141 @@ function createScene(engine: Engine): Scene {
   if (canvas) {
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button === 2) {
-        switchCamera(true); // Switch to 2D (orthographic) camera
+        // Extra: Try to pick a mesh under the pointer for debug
+        let pickedMesh = null;
+        if (scene) {
+          const pickResult = scene.pick(scene.pointerX, scene.pointerY);
+          if (pickResult && pickResult.hit && pickResult.pickedMesh) {
+            pickedMesh = {
+              name: pickResult.pickedMesh.name,
+              position: pickResult.pickedMesh.position
+            };
+          }
+        }
         isRightDragging = true;
         panStartPointerX = e.clientX;
         panStartPointerY = e.clientY;
+        // Get the world point under the pointer at drag start
         const camera = getActiveCamera();
-        panStartTarget.copyFrom(camera.target);
-        panStartCameraPos.copyFrom(camera.position);
-        // Record the world point under the pointer at drag start
-        const scene = camera.getScene();
+        const currentScene = camera.getScene();
         const pickPlaneNormal = camera.getForwardRay().direction;
         const plane = Plane.FromPositionAndNormal(camera.target, pickPlaneNormal);
-        const ray = scene.createPickingRay(
+        const ray = currentScene.createPickingRay(
           panStartPointerX,
           panStartPointerY,
           Matrix.Identity(),
           camera
         );
         const dist = ray.intersectsPlane(plane);
+        console.log('[DEBUG] drag start dist:', dist);
         panStartWorldPoint = dist == null ? camera.target.clone() : ray.origin.add(ray.direction.scale(dist));
+        console.log('[DEBUG] drag start panStartWorldPoint:', panStartWorldPoint);
+        // Store each object's original position and screen position
+        objectsStartPositions = ModeController.objects.map(obj => obj.sphere.position.clone());
+        objectsStartScreenPositions = [];
+
+        ModeController.objects.forEach(obj => {
+          const pos = obj.sphere.position;
+          const camera = scene.activeCamera!;
+          // Log camera and sphere state with actual numbers for debugging
+          const camPos = camera.globalPosition;
+          let camTarget = (camera as any).target ? (camera as any).target : undefined;
+          console.log('[DEBUG] Camera state NUMBERS:', {
+            camPos: camPos && { x: camPos.x, y: camPos.y, z: camPos.z },
+            camTarget: camTarget && { x: camTarget.x, y: camTarget.y, z: camTarget.z }
+          });
+          console.log('[DEBUG] Camera viewMatrix:', camera.getViewMatrix().toArray());
+          console.log('[DEBUG] Camera projectionMatrix:', camera.getProjectionMatrix().toArray());
+          console.log('[DEBUG] Sphere position:', { x: pos.x, y: pos.y, z: pos.z });
+          // Project world to canvas pixel coordinates
+          // Debug: print types before projection
+          console.log('[DEBUG] Types:', { Vector3: Vector3 });
+          const worldMatrix = obj.sphere.getWorldMatrix();
+          const viewMatrix = camera.getViewMatrix();
+          const projMatrix = camera.getProjectionMatrix();
+          const viewport = new Viewport(0, 0, engine.getRenderWidth(), engine.getRenderHeight());
+          console.log('[DEBUG] World matrix:', worldMatrix.toArray());
+          console.log('[DEBUG] View matrix:', viewMatrix.toArray());
+          console.log('[DEBUG] Projection matrix:', projMatrix.toArray());
+          console.log('[DEBUG] Viewport:', viewport);
+          console.log('[DEBUG] Camera type:', camera.getClassName ? camera.getClassName() : (camera.constructor && camera.constructor.name));
+          console.log('[DEBUG] Camera handedness:', camera.getScene().useRightHandedSystem);
+          const projected = Vector3.Project(
+            pos,
+            Matrix.Identity(),
+            scene.getTransformMatrix(),
+            scene.activeCamera!.viewport.toGlobal(
+              engine.getRenderWidth(),
+              engine.getRenderHeight()
+            )
+          );
+          if (
+            !isFinite(projected.x) || !isFinite(projected.y) || !isFinite(projected.z) ||
+            isNaN(projected.x) || isNaN(projected.y) || isNaN(projected.z)
+          ) {
+            console.warn('[WARNING] Skipping object for drag: projection invalid', { pos, projected });
+            // Do NOT push placeholders; skip this object entirely for this drag
+            return;
+          }
+          // Clamp projected.z to [0, 0.99] for valid unprojection
+          const clampedZ = Math.max(0, Math.min(0.99, projected.z));
+          objectsStartWorldPositions.push(pos.clone());
+          const cam = scene.activeCamera!;
+          const depth = Vector3.Distance(cam.position, pos);
+          objectsStartDepths.push(depth);
+          const ray = scene.createPickingRay(panStartPointerX, panStartPointerY, Matrix.Identity(), cam);
+          const rayPoint = ray.origin.add(ray.direction.scale(depth));
+          const offset = pos.subtract(rayPoint);
+          objectsStartOffsets.push(offset);
+          objectsStartScreenPositions.push({ x: projected.x, y: projected.y, z: clampedZ });
+        });
+        console.log('[DEBUG] pointerdown (move objects):', {
+          panStartWorldPoint,
+          panStartPointerX,
+          panStartPointerY,
+          pickedMesh
+        });
         e.preventDefault();
       }
     });
+    // Drag state arrays (move to appropriate outer scope)
+    const objectsStartWorldPositions: Vector3[] = [];
+    const objectsStartDepths: number[] = [];
+    const objectsStartOffsets: Vector3[] = [];
+
     canvas.addEventListener('pointermove', (e) => {
       if (isRightDragging) {
-        const camera = getActiveCamera();
-        // Move the camera so the world point under the initial pointer stays under the pointer as you drag
-        const scene = camera.getScene();
-        const pickPlaneNormal = camera.getForwardRay().direction;
-        const plane = Plane.FromPositionAndNormal(camera.target, pickPlaneNormal);
-        // Get the world point under the current pointer
-        const ray = scene.createPickingRay(
-          e.clientX,
-          e.clientY,
-          Matrix.Identity(),
-          camera
-        );
-        const dist = ray.intersectsPlane(plane);
-        const worldNow = dist == null ? camera.target.clone() : ray.origin.add(ray.direction.scale(dist));
-        // Compute translation needed to keep panStartWorldPoint under the pointer
-        const delta = panStartWorldPoint.subtract(worldNow);
-        camera.target.copyFrom(panStartTarget.add(delta));
-        camera.position.copyFrom(panStartCameraPos.add(delta));
-        e.preventDefault();
+        // Move all objects to follow the mouse, preserving their original depth and offset
+        const cam = scene.activeCamera!;
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+        ModeController.draggableObjects.forEach((obj: Mesh, i: number) => {
+          const depth = objectsStartDepths[i];
+          const offset = objectsStartOffsets[i];
+          // Defensive: skip if drag state is missing
+          if (depth === undefined || offset === undefined) return;
+          const ray = scene.createPickingRay(mouseX, mouseY, Matrix.Identity(), cam);
+          const rayPoint = ray.origin.add(ray.direction.scale(depth));
+          obj.position.copyFrom(rayPoint.add(offset));
+        });
+        // You may want to update the following block to also use only valid objects, or remove it if redundant
+        /*
+        const dx = e.clientX - panStartPointerX;
+        const dy = e.clientY - panStartPointerY;
+        ModeController.objects.forEach((obj, i) => {
+          const origScreen = objectsStartScreenPositions[i];
+          if (!origScreen) {
+            // Skip this object, projection was invalid
+            return;
+          }
+          // Add mouse delta to original pixel screen position
+        });
+        */
       }
     });
-    canvas.addEventListener('pointerup', (e) => {
-      if (e.button === 2) {
-        isRightDragging = false;
-        switchCamera(false); // Revert to 3D (perspective) camera
-        e.preventDefault();
-      }
-    });
+
   }
+
   // Optionally, you can set camera.inertia = 0 for instant stops
   // getActiveCamera().inertia = 0;
 
@@ -200,8 +292,6 @@ function createScene(engine: Engine): Scene {
   });
 
   // Optionally, reduce hemispheric light to near zero for a more sun-dominated look
-  const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), scene);
-  hemiLight.intensity = 0.05;
 
   // Add a default environment texture for PBR reflections
   // This uses Babylon's built-in environment texture from CDN
@@ -227,7 +317,6 @@ function createScene(engine: Engine): Scene {
 
   return scene;
 }
-
 
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
 // Disable right-click context menu so Babylon camera orbit works

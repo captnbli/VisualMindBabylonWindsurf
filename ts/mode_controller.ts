@@ -1,4 +1,8 @@
-import { Engine, Scene, Color3, Vector3, Camera, Mesh, AbstractMesh } from "babylonjs";
+import { Engine } from "../../Babylon.js/packages/dev/core/dist/Engines/engine";
+import { Scene } from "../../Babylon.js/packages/dev/core/dist/scene";
+import { Color3, Vector3 } from "../../Babylon.js/packages/dev/core/dist/Maths/math";
+import { Camera } from "../../Babylon.js/packages/dev/core/dist/Cameras/camera";
+import { Mesh, AbstractMesh } from "../../Babylon.js/packages/dev/core/dist/Meshes/mesh";
 
 import Answer from './concepts/answer';
 import Question from './concepts/question';
@@ -35,6 +39,9 @@ const modeMap: Record<Mode, ConceptConstructor> = {
 };
 
 class ModeController {
+  public get draggableObjects(): Mesh[] {
+    return this.objects;
+  }
   private readonly keyMap: Record<string, Mode> = {
     a: Types.Answer,
     q: Types.Question,

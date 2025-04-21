@@ -1,4 +1,8 @@
-import { Engine, Scene, Color3, Vector3, Camera, Mesh } from "babylonjs/Engines/engine";
+import { Engine } from "../../../Babylon.js/packages/dev/core/dist/Engines/engine";
+import { Scene } from "../../../Babylon.js/packages/dev/core/dist/scene";
+import { Color3, Vector3 } from "../../../Babylon.js/packages/dev/core/dist/Maths/math";
+import { Camera } from "../../../Babylon.js/packages/dev/core/dist/Cameras/camera";
+import { Mesh } from "../../../Babylon.js/packages/dev/core/dist/Meshes/mesh";
 
 import type { Concept } from './concept';
 import Answer from './answer';

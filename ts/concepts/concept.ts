@@ -1,6 +1,14 @@
-import { Engine, Scene, Color3, Vector3, Camera, Mesh, MeshBuilder, StandardMaterial, PBRMetallicRoughnessMaterial } from "babylonjs";
-import { AdvancedDynamicTexture, TextBlock, Rectangle } from "babylonjs/Gui";
-import "babylonjs/Loaders";
+import { Engine } from "../../../Babylon.js/packages/dev/core/dist/Engines/engine";
+import { Scene } from "../../../Babylon.js/packages/dev/core/dist/scene";
+import { Color3, Color4, Vector3 } from "../../../Babylon.js/packages/dev/core/dist/Maths/math";
+import { Camera } from "../../../Babylon.js/packages/dev/core/dist/Cameras/camera";
+import { Mesh } from "../../../Babylon.js/packages/dev/core/dist/Meshes/mesh";
+import { MeshBuilder } from "../../../Babylon.js/packages/dev/core/dist/Meshes/meshBuilder";
+import { StandardMaterial } from "../../../Babylon.js/packages/dev/core/dist/Materials/standardMaterial";
+import { PBRMetallicRoughnessMaterial } from "../../../Babylon.js/packages/dev/core/dist/Materials/PBR/pbrMetallicRoughnessMaterial";
+import { AdvancedDynamicTexture } from "../../../Babylon.js/packages/dev/gui/dist/2D/advancedDynamicTexture";
+import { TextBlock, Rectangle } from "../../../Babylon.js/packages/dev/gui/dist/2D/controls";
+import { BaseTexture } from "../../../Babylon.js/packages/dev/core/dist/Materials/Textures/baseTexture";
 
 interface ConceptOptions {
   color?: Color3;
