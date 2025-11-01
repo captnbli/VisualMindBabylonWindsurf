@@ -1,8 +1,10 @@
-import { Engine } from "../../Babylon.js/packages/dev/core/dist/Engines/engine";
-import { Scene } from "../../Babylon.js/packages/dev/core/dist/scene";
-import { Color3, Vector3 } from "../../Babylon.js/packages/dev/core/dist/Maths/math";
-import { Camera } from "../../Babylon.js/packages/dev/core/dist/Cameras/camera";
-import { Mesh, AbstractMesh } from "../../Babylon.js/packages/dev/core/dist/Meshes/mesh";
+import { Engine } from "@babylonjs/core/Engines/engine";
+import { Scene } from "@babylonjs/core/scene";
+import { Color3, Vector3, Matrix } from "@babylonjs/core/Maths/math";
+import { Camera } from "@babylonjs/core/Cameras/camera";
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
+import { Plane } from "@babylonjs/core/Maths/math.plane";
 
 import Answer from './concepts/answer';
 import Question from './concepts/question';
@@ -23,7 +25,7 @@ interface ModeControllerConfig {
 
 // Define a concept constructor type
 type ConceptConstructor = new (
-  scene: BABYLON.Scene,
+  scene: Scene,
   options?: Record<string, any>
 ) => any;
 
@@ -57,7 +59,7 @@ class ModeController {
   private camera!: Camera;
   private engine!: Engine;
   private objects: any[] = [];
-  private selectedObject: AbstractMesh | null = null;
+  private selectedObject: any | null = null;
 
   init({ scene, camera, engine }: ModeControllerConfig): void {
     this.scene = scene;
@@ -83,6 +85,8 @@ class ModeController {
       canvas.addEventListener('pointerdown', (event) => this.handleMouseDown(event), false);
       canvas.addEventListener('pointermove', (event) => this.handlePointerMove(event), false);
       canvas.addEventListener('pointerup', (event) => this.handlePointerUp(event), false);
+      // Add right-click handler for camera mode switching
+      canvas.addEventListener('contextmenu', (event) => this.handleRightClick(event), false);
     }
     window.addEventListener('resize', () => this.handleWindowResize());
   }
@@ -111,9 +115,9 @@ class ModeController {
 
     if (pickResult && pickResult.hit && pickResult.pickedMesh) {
       // Select the sphere for dragging
-      this.selectedObject = pickResult.pickedMesh as BABYLON.AbstractMesh;
+      this.selectedObject = pickResult.pickedMesh;
       this._dragging = true;
-      this._dragOffset = pickResult.pickedPoint ? pickResult.pickedPoint.subtract(this.selectedObject.position) : BABYLON.Vector3.Zero();
+      this._dragOffset = pickResult.pickedPoint ? pickResult.pickedPoint.subtract(this.selectedObject.position) : Vector3.Zero();
       // Set drag plane to go through the sphere's original position, perpendicular to camera's forward
       this._dragPlaneOrigin = this.selectedObject.position.clone();
       this._dragPlaneNormal = this.camera.getForwardRay().direction.normalize();
@@ -121,35 +125,38 @@ class ModeController {
     }
 
     // Otherwise, create a new concept at the pointer position
-    let pos: BABYLON.Vector3 | null = null;
+    let pos: Vector3 | null = null;
     const canvas = this.engine.getRenderingCanvas();
-    if (this.camera.mode === BABYLON.Camera.ORTHOGRAPHIC_CAMERA && canvas) {
+    if (this.camera.mode === Camera.ORTHOGRAPHIC_CAMERA && canvas) {
       // Map pointer X/Y to world X/Y in the ortho camera's visible region
       const rect = canvas.getBoundingClientRect();
       const pointerX = event.clientX - rect.left;
       const pointerY = event.clientY - rect.top;
       const ndcX = (pointerX / canvas.width) * 2 - 1; // [-1, 1]
       const ndcY = 1 - (pointerY / canvas.height) * 2; // [1, -1]
-      const orthoLeft = (this.camera as any).orthoLeft;
-      const orthoRight = (this.camera as any).orthoRight;
-      const orthoTop = (this.camera as any).orthoTop;
-      const orthoBottom = (this.camera as any).orthoBottom;
+      
+      // Get orthographic bounds from camera
+      const orthoLeft = this.camera.orthoLeft || -100;
+      const orthoRight = this.camera.orthoRight || 100;
+      const orthoTop = this.camera.orthoTop || 100;
+      const orthoBottom = this.camera.orthoBottom || -100;
+      
       const worldX = orthoLeft + (ndcX + 1) * (orthoRight - orthoLeft) / 2;
       const worldY = orthoBottom + (ndcY + 1) * (orthoTop - orthoBottom) / 2;
       const forward = this.camera.getForwardRay().direction.normalize();
       const worldZ = this.camera.position.z + 20 * forward.z;
-      pos = new BABYLON.Vector3(worldX, worldY, worldZ);
+      pos = new Vector3(worldX, worldY, worldZ);
     } else {
       // Perspective: ray-plane intersection
       const ray = this.scene.createPickingRay(
         this.scene.pointerX,
         this.scene.pointerY,
-        BABYLON.Matrix.Identity(),
+        Matrix.Identity(),
         this.camera
       );
       const forward = this.camera.getForwardRay().direction.normalize();
       const planeOrigin = this.camera.position.add(forward.scale(20));
-      const plane = BABYLON.Plane.FromPositionAndNormal(planeOrigin, forward);
+      const plane = Plane.FromPositionAndNormal(planeOrigin, forward);
       const distance = ray.intersectsPlane(plane);
       pos = distance == null ? planeOrigin.clone() : ray.origin.add(ray.direction.scale(distance));
     }
@@ -159,6 +166,12 @@ class ModeController {
       console.log("No mode selected or invalid mode.");
       return;
     }
+    
+    if (!pos) {
+      console.log("Could not determine position for new concept.");
+      return;
+    }
+    
     const ConceptClass = ConceptMap[currentMode];
     const createdObject = new ConceptClass(this.scene, {
       position: pos,
@@ -174,9 +187,9 @@ class ModeController {
   }
 
   private _dragging: boolean = false;
-  private _dragOffset: BABYLON.Vector3 = BABYLON.Vector3.Zero();
-  private _dragPlaneOrigin: BABYLON.Vector3 | null = null;
-  private _dragPlaneNormal: BABYLON.Vector3 | null = null;
+  private _dragOffset: Vector3 = Vector3.Zero();
+  private _dragPlaneOrigin: Vector3 | null = null;
+  private _dragPlaneNormal: Vector3 | null = null;
 
   private handlePointerMove(event: PointerEvent): void {
     if (!this._dragging || !this.selectedObject || !this._dragPlaneOrigin || !this._dragPlaneNormal) return;
@@ -184,10 +197,10 @@ class ModeController {
     const ray = this.scene.createPickingRay(
       this.scene.pointerX,
       this.scene.pointerY,
-      BABYLON.Matrix.Identity(),
+      Matrix.Identity(),
       this.camera
     );
-    const plane = BABYLON.Plane.FromPositionAndNormal(this._dragPlaneOrigin, this._dragPlaneNormal);
+    const plane = Plane.FromPositionAndNormal(this._dragPlaneOrigin, this._dragPlaneNormal);
     const distance = ray.intersectsPlane(plane);
     const newPos = distance == null ? this._dragPlaneOrigin.clone() : ray.origin.add(ray.direction.scale(distance));
     if (newPos) {
@@ -198,11 +211,50 @@ class ModeController {
   private handlePointerUp(event: PointerEvent): void {
     if (this._dragging) {
       this._dragging = false;
-      this._dragOffset = BABYLON.Vector3.Zero();
+      this._dragOffset = Vector3.Zero();
       this._dragPlaneOrigin = null;
       this._dragPlaneNormal = null;
     }
     this.selectedObject = null;
+  }
+
+  private handleRightClick(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Toggle between orthographic and perspective modes
+    if (this.camera.mode === Camera.ORTHOGRAPHIC_CAMERA) {
+      // Switch to perspective mode
+      this.camera.mode = Camera.PERSPECTIVE_CAMERA;
+      console.log('Switched to Perspective mode');
+    } else {
+      // Switch to orthographic mode
+      this.camera.mode = Camera.ORTHOGRAPHIC_CAMERA;
+      // Configure orthographic camera properly
+      this.configureOrthographicCamera();
+      console.log('Switched to Orthographic mode');
+    }
+    
+    // Dispatch custom event for UI updates
+    window.dispatchEvent(new CustomEvent('cameraModeChanged', {
+      detail: { mode: this.camera.mode }
+    }));
+  }
+
+  private configureOrthographicCamera(): void {
+    if (this.camera instanceof ArcRotateCamera) {
+      // Set orthographic camera parameters
+      const aspectRatio = this.engine.getAspectRatio(this.camera);
+      const radius = this.camera.radius;
+      
+      // Calculate orthographic bounds based on camera radius
+      const orthoSize = radius * 0.8; // Adjust this multiplier as needed
+      
+      this.camera.orthoLeft = -orthoSize * aspectRatio;
+      this.camera.orthoRight = orthoSize * aspectRatio;
+      this.camera.orthoTop = orthoSize;
+      this.camera.orthoBottom = -orthoSize;
+    }
   }
 
   updateObjects(): void {

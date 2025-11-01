@@ -1,6 +1,6 @@
 import { Concept, ConceptOptions } from './concept';
-import { Color3 } from "../../../Babylon.js/packages/dev/core/dist/Maths/math";
-import { Scene } from "../../../Babylon.js/packages/dev/core/dist/scene";
+import { Color3 } from "@babylonjs/core/Maths/math";
+import { Scene } from "@babylonjs/core/scene";
 
 export default class Plus extends Concept {
   constructor(scene: Scene, options: ConceptOptions = {}) {

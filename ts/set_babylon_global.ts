@@ -1,3 +1,3 @@
-import * as BABYLON from "../../Babylon.js/packages/dev/core/dist/index";
+import * as BABYLON from "@babylonjs/core";
 (window as any).BABYLON = BABYLON;
 export default BABYLON;

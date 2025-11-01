@@ -8,14 +8,7 @@
     "esModuleInterop": true,
     "jsx": "preserve",
     "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "babylonjs/*": ["../Babylon.js/packages/dev/core/dist/*"],
-      "babylonjs/Gui": ["../Babylon.js/packages/dev/gui/dist/index"],
-      "babylonjs/Materials": ["../Babylon.js/packages/dev/materials/dist/index"],
-      "babylonjs/Loaders": ["../Babylon.js/packages/dev/loaders/dist/index"],
-      "@babylonjs/core/*": ["../Babylon.js/packages/dev/core/dist/*"]
-    }
+    "baseUrl": "."
   },
   "exclude": ["../../node_modules", "node_modules", "dist"]
 }

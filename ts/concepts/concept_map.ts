@@ -1,8 +1,4 @@
-import { Engine } from "../../../Babylon.js/packages/dev/core/dist/Engines/engine";
-import { Scene } from "../../../Babylon.js/packages/dev/core/dist/scene";
-import { Color3, Vector3 } from "../../../Babylon.js/packages/dev/core/dist/Maths/math";
-import { Camera } from "../../../Babylon.js/packages/dev/core/dist/Cameras/camera";
-import { Mesh } from "../../../Babylon.js/packages/dev/core/dist/Meshes/mesh";
+import { Scene } from "@babylonjs/core/scene";
 
 import type { Concept } from './concept';
 import Answer from './answer';
@@ -15,7 +11,7 @@ import Reference from './reference';
 
 import { Mode, Types } from './types';
 type ConceptConstructor = new (
-  scene: BABYLON.Scene,
+  scene: Scene,
   options?: Record<string, any>
 ) => Concept;
 

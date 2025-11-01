@@ -6,65 +6,12 @@
     "start": "parcel index.html",
     "build": "parcel build index.html"
   },
+  "dependencies": {
+    "@babylonjs/core": "^7.0.0",
+    "@babylonjs/gui": "^7.0.0"
+  },
   "devDependencies": {
     "parcel": "latest",
     "typescript": "latest"
-  },
-  "alias": {
-    "core": "../Babylon.js/packages/dev/core/dist",
-    "gui": "../Babylon.js/packages/dev/gui/dist",
-    "materials": "../Babylon.js/packages/dev/materials/dist",
-    "loaders": "../Babylon.js/packages/dev/loaders/dist",
-    "babylonjs": "../Babylon.js/packages/dev/core/dist/index.js",
-    "babylonjs/scene": "../Babylon.js/packages/dev/core/dist/scene.js",
-    "babylonjs/Engines/engine": "../Babylon.js/packages/dev/core/dist/Engines/engine.js",
-    "babylonjs/Maths/math": "../Babylon.js/packages/dev/core/dist/Maths/math.js",
-    "babylonjs/Maths/math.vector": "../Babylon.js/packages/dev/core/dist/Maths/math.vector.js",
-    "babylonjs/Maths/math.plane": "../Babylon.js/packages/dev/core/dist/Maths/math.plane.js",
-    "babylonjs/Cameras": "../Babylon.js/packages/dev/core/dist/Cameras/index.js",
-    "babylonjs/Cameras/camera": "../Babylon.js/packages/dev/core/dist/Cameras/camera.js",
-    "babylonjs/Cameras/arcRotateCamera": "../Babylon.js/packages/dev/core/dist/Cameras/arcRotateCamera.js",
-    "babylonjs/Cameras/freeCamera": "../Babylon.js/packages/dev/core/dist/Cameras/freeCamera.js",
-    "babylonjs/Cameras/targetCamera": "../Babylon.js/packages/dev/core/dist/Cameras/targetCamera.js",
-    "babylonjs/Meshes/mesh": "../Babylon.js/packages/dev/core/dist/Meshes/mesh.js",
-    "babylonjs/Meshes/meshBuilder": "../Babylon.js/packages/dev/core/dist/Meshes/meshBuilder.js",
-    "babylonjs/Lights": "../Babylon.js/packages/dev/core/dist/Lights/index.js",
-    "babylonjs/Lights/light": "../Babylon.js/packages/dev/core/dist/Lights/light.js",
-    "babylonjs/Lights/directionalLight": "../Babylon.js/packages/dev/core/dist/Lights/directionalLight.js",
-    "babylonjs/Lights/hemisphericLight": "../Babylon.js/packages/dev/core/dist/Lights/hemisphericLight.js",
-
-    "babylonjs/Materials/imageProcessingConfiguration": "../Babylon.js/packages/dev/core/dist/Materials/imageProcessingConfiguration.js",
-    "babylonjs/Gui": "../Babylon.js/packages/dev/gui/dist/index.js",
-    "babylonjs/Materials": "../Babylon.js/packages/dev/materials/dist/index.js",
-    "babylonjs/Loaders": "../Babylon.js/packages/dev/loaders/dist/index.js",
-    "babylonjs/PBRMetallicRoughnessMaterial": "../Babylon.js/packages/dev/core/dist/Materials/PBR/pbrMetallicRoughnessMaterial.js",
-    "babylonjs/StandardMaterial": "../Babylon.js/packages/dev/core/dist/Materials/standardMaterial.js",
-    "babylonjs/PostProcesses/postProcess": "../Babylon.js/packages/dev/core/dist/PostProcesses/postProcess.js",
-
-
-
-    "babylonjs/Materials/Textures/colorGradingTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/colorGradingTexture.js",
-
-    "babylonjs/Materials/Textures/dynamicTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/dynamicTexture.js",
-    "babylonjs/Materials/Textures/equiRectangularCubeTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/equiRectangularCubeTexture.js",
-    "babylonjs/Materials/Textures/externalTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/externalTexture.js",
-    "babylonjs/Materials/Textures/hardwareTextureWrapper": "../Babylon.js/packages/dev/core/dist/Materials/Textures/hardwareTextureWrapper.js",
-    "babylonjs/Materials/Textures/hdrCubeTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/hdrCubeTexture.js",
-    "babylonjs/Materials/Textures/htmlElementTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/htmlElementTexture.js",
-    "babylonjs/Materials/Textures/internalTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/internalTexture.js",
-    "babylonjs/Materials/Textures/mirrorTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/mirrorTexture.js",
-    "babylonjs/Materials/Textures/multiRenderTarget": "../Babylon.js/packages/dev/core/dist/Materials/Textures/multiRenderTarget.js",
-    "babylonjs/Materials/Textures/prePassRenderTarget": "../Babylon.js/packages/dev/core/dist/Materials/Textures/prePassRenderTarget.js",
-    "babylonjs/Materials/Textures/rawCubeTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/rawCubeTexture.js",
-    "babylonjs/Materials/Textures/rawTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/rawTexture.js",
-    "babylonjs/Materials/Textures/refractionTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/refractionTexture.js",
-    "babylonjs/Materials/Textures/renderTargetTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/renderTargetTexture.js",
-    "babylonjs/Materials/Textures/thinRenderTargetTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/thinRenderTargetTexture.js",
-    "babylonjs/Materials/Textures/thinTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/thinTexture.js",
-    "babylonjs/Materials/Textures/baseTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/baseTexture.js",
-    "babylonjs/Materials/Textures/baseTexture.js": "../Babylon.js/packages/dev/core/dist/Materials/Textures/baseTexture.js",
-    "babylonjs/Materials/Textures/cubeTexture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/cubeTexture.js",
-    "babylonjs/Materials/Textures/texture": "../Babylon.js/packages/dev/core/dist/Materials/Textures/texture.js",
-    "babylonjs/Materials/Textures/texture.js": "../Babylon.js/packages/dev/core/dist/Materials/Textures/texture.js"
   }
 }
