@@ -114,7 +114,8 @@ class Concept {
   }
 
   public update(): void {
-    this.sphere.rotation.y += 0.01;
+    // Spheres are rotationally symmetric so they don't need to face the camera
+    // They should appear circular naturally with proper camera FOV settings
 
     // Update labels to face camera
     if (this.camera) {

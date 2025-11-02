@@ -23,6 +23,9 @@ interface ModeControllerConfig {
   engine: Engine;
 }
 
+// Fixed distance from camera center to placement plane
+const PLACEMENT_PLANE_DISTANCE = 20;
+
 // Define a concept constructor type
 type ConceptConstructor = new (
   scene: Scene,
@@ -42,7 +45,7 @@ const modeMap: Record<Mode, ConceptConstructor> = {
 
 class ModeController {
   public get draggableObjects(): Mesh[] {
-    return this.objects;
+    return [];
   }
   private readonly keyMap: Record<string, Mode> = {
     a: Types.Answer,
@@ -56,16 +59,27 @@ class ModeController {
   
   private mode: Mode | null = null;
   private scene!: Scene;
-  private camera!: Camera;
+  private camera!: ArcRotateCamera;
   private engine!: Engine;
   private objects: any[] = [];
-  private selectedObject: any | null = null;
+  
+  // Camera rotation state
+  private _isRotating: boolean = false;
+  private _isPointerDown: boolean = false;
+  private _lastPointerX: number = 0;
+  private _lastPointerY: number = 0;
+  private _hasMoved: boolean = false;
 
   init({ scene, camera, engine }: ModeControllerConfig): void {
     this.scene = scene;
+    if (!(camera instanceof ArcRotateCamera)) {
+      throw new Error("Camera must be an ArcRotateCamera");
+    }
     this.camera = camera;
     this.engine = engine;
     this.mode = Types.Answer;
+    
+    // Camera controls are handled manually - don't use default controls
     this.attachEventListeners();
   }
 
@@ -82,11 +96,12 @@ class ModeController {
     window.addEventListener('keydown', (event) => this.handleKeydown(event));
     const canvas = this.engine.getRenderingCanvas();
     if (canvas) {
-      canvas.addEventListener('pointerdown', (event) => this.handleMouseDown(event), false);
+      canvas.addEventListener('pointerdown', (event) => this.handlePointerDown(event), false);
       canvas.addEventListener('pointermove', (event) => this.handlePointerMove(event), false);
       canvas.addEventListener('pointerup', (event) => this.handlePointerUp(event), false);
-      // Add right-click handler for camera mode switching
-      canvas.addEventListener('contextmenu', (event) => this.handleRightClick(event), false);
+      canvas.addEventListener('wheel', (event) => this.handleWheel(event), false);
+      // Prevent context menu
+      canvas.addEventListener('contextmenu', (event) => event.preventDefault(), false);
     }
     window.addEventListener('resize', () => this.handleWindowResize());
   }
@@ -101,76 +116,171 @@ class ModeController {
     }
   }
 
-  private handleMouseDown(event: PointerEvent): void {
-    // Only respond to left mouse button (0 = left, 1 = middle, 2 = right)
+  private handlePointerDown(event: PointerEvent): void {
+    // Only respond to left mouse button
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
 
-    // Pick mesh under pointer
+    // Mark pointer as down
+    this._isPointerDown = true;
+
+    // Update scene pointer position for picking
+    const canvas = this.engine.getRenderingCanvas();
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    this.scene.pointerX = event.clientX - rect.left;
+    this.scene.pointerY = event.clientY - rect.top;
+    this._lastPointerX = event.clientX - rect.left;
+    this._lastPointerY = event.clientY - rect.top;
+
+    // Check if we clicked on a sphere - if so, do nothing (spheres don't move)
     const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => {
-      // Only pick spheres (Concepts)
       return mesh && mesh.name.startsWith('sphere');
     });
 
     if (pickResult && pickResult.hit && pickResult.pickedMesh) {
-      // Select the sphere for dragging
-      this.selectedObject = pickResult.pickedMesh;
-      this._dragging = true;
-      this._dragOffset = pickResult.pickedPoint ? pickResult.pickedPoint.subtract(this.selectedObject.position) : Vector3.Zero();
-      // Set drag plane to go through the sphere's original position, perpendicular to camera's forward
-      this._dragPlaneOrigin = this.selectedObject.position.clone();
-      this._dragPlaneNormal = this.camera.getForwardRay().direction.normalize();
+      // Sphere clicked - do nothing, spheres are fixed
+      this._isPointerDown = false;
       return;
     }
 
-    // Otherwise, create a new concept at the pointer position
-    let pos: Vector3 | null = null;
-    const canvas = this.engine.getRenderingCanvas();
-    if (this.camera.mode === Camera.ORTHOGRAPHIC_CAMERA && canvas) {
-      // Map pointer X/Y to world X/Y in the ortho camera's visible region
-      const rect = canvas.getBoundingClientRect();
-      const pointerX = event.clientX - rect.left;
-      const pointerY = event.clientY - rect.top;
-      const ndcX = (pointerX / canvas.width) * 2 - 1; // [-1, 1]
-      const ndcY = 1 - (pointerY / canvas.height) * 2; // [1, -1]
-      
-      // Get orthographic bounds from camera
-      const orthoLeft = this.camera.orthoLeft || -100;
-      const orthoRight = this.camera.orthoRight || 100;
-      const orthoTop = this.camera.orthoTop || 100;
-      const orthoBottom = this.camera.orthoBottom || -100;
-      
-      const worldX = orthoLeft + (ndcX + 1) * (orthoRight - orthoLeft) / 2;
-      const worldY = orthoBottom + (ndcY + 1) * (orthoTop - orthoBottom) / 2;
-      const forward = this.camera.getForwardRay().direction.normalize();
-      const worldZ = this.camera.position.z + 20 * forward.z;
-      pos = new Vector3(worldX, worldY, worldZ);
-    } else {
-      // Perspective: ray-plane intersection
-      const ray = this.scene.createPickingRay(
-        this.scene.pointerX,
-        this.scene.pointerY,
-        Matrix.Identity(),
-        this.camera
-      );
-      const forward = this.camera.getForwardRay().direction.normalize();
-      const planeOrigin = this.camera.position.add(forward.scale(20));
-      const plane = Plane.FromPositionAndNormal(planeOrigin, forward);
-      const distance = ray.intersectsPlane(plane);
-      pos = distance == null ? planeOrigin.clone() : ray.origin.add(ray.direction.scale(distance));
-    }
+    // Reset rotation state - we'll create concept on pointer up if not dragged
+    this._isRotating = false; // Start as false, will be set to true on drag
+    this._hasMoved = false; // Track if mouse moved during this click
+  }
+  private handleWindowResize(): void {
+    this.engine.resize();
+  }
 
+  private handlePointerMove(event: PointerEvent): void {
+    const canvas = this.engine.getRenderingCanvas();
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const currentX = event.clientX - rect.left;
+    const currentY = event.clientY - rect.top;
+    
+    // Update scene pointer position (needed for picking)
+    this.scene.pointerX = currentX;
+    this.scene.pointerY = currentY;
+    
+    // Only handle camera rotation if pointer is down (dragging)
+    if (!this._isPointerDown) return;
+    
+    // Check if mouse has moved significantly (more than a few pixels)
+    const deltaX = currentX - this._lastPointerX;
+    const deltaY = currentY - this._lastPointerY;
+    const moveThreshold = 3; // pixels
+    
+    if (Math.abs(deltaX) > moveThreshold || Math.abs(deltaY) > moveThreshold) {
+      this._hasMoved = true;
+      // Start rotating if we're dragging
+      if (!this._isRotating) {
+        this._isRotating = true;
+      }
+    }
+    
+    if (!this._isRotating) return;
+    
+    // Convert pixel movement to camera rotation
+    // Horizontal movement rotates around Y axis (alpha)
+    // Vertical movement rotates around X axis (beta)
+    const rotationSpeed = 0.01;
+    this.camera.alpha -= deltaX * rotationSpeed;
+    this.camera.beta += deltaY * rotationSpeed;
+    
+    // Clamp beta to reasonable limits
+    this.camera.beta = Math.max(0.01, Math.min(Math.PI / 2.2, this.camera.beta));
+    
+    this._lastPointerX = currentX;
+    this._lastPointerY = currentY;
+  }
+
+  private handlePointerUp(event: PointerEvent): void {
+    // Only handle if this was the left button we were tracking
+    if (!this._isPointerDown) return;
+    
+    // If we didn't move much and a mode is active, create a concept
+    if (!this._hasMoved && !this._isRotating) {
+      const currentMode = this.getMode();
+      if (currentMode && ConceptMap[currentMode]) {
+        // Update pointer position one more time
+        const canvas = this.engine.getRenderingCanvas();
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          this.scene.pointerX = event.clientX - rect.left;
+          this.scene.pointerY = event.clientY - rect.top;
+          this.createConceptAtPointer();
+        }
+      }
+    }
+    
+    // Reset all state
+    this._isPointerDown = false;
+    this._isRotating = false;
+    this._hasMoved = false;
+  }
+
+  private handleWheel(event: WheelEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Zoom camera forward/back by changing radius
+    const zoomSpeed = 2;
+    const delta = event.deltaY > 0 ? zoomSpeed : -zoomSpeed;
+    
+    this.camera.radius += delta;
+    
+    // Clamp radius to limits
+    if (this.camera.lowerRadiusLimit !== null) {
+      this.camera.radius = Math.max(this.camera.radius, this.camera.lowerRadiusLimit);
+    }
+    if (this.camera.upperRadiusLimit !== null) {
+      this.camera.radius = Math.min(this.camera.radius, this.camera.upperRadiusLimit);
+    }
+  }
+
+  // Get the placement plane position (20 units from camera to center)
+  private getPlacementPlane(): { origin: Vector3; normal: Vector3 } {
+    // Get forward direction from camera position toward target (center)
+    const forward = this.camera.getTarget().subtract(this.camera.position).normalize();
+    // Plane is at fixed distance (20 units) from camera along forward direction
+    const planeOrigin = this.camera.position.add(forward.scale(PLACEMENT_PLANE_DISTANCE));
+    // Normal points in forward direction (away from camera)
+    return {
+      origin: planeOrigin,
+      normal: forward
+    };
+  }
+
+  // Create a new concept at the clicked position on the placement plane
+  createConceptAtPointer(): void {
     const currentMode = this.getMode();
     if (!currentMode || !ConceptMap[currentMode]) {
       console.log("No mode selected or invalid mode.");
       return;
     }
+
+    // Ray-plane intersection with placement plane
+    const ray = this.scene.createPickingRay(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      Matrix.Identity(),
+      this.camera
+    );
     
-    if (!pos) {
+    const { origin: planeOrigin, normal: planeNormal } = this.getPlacementPlane();
+    const plane = Plane.FromPositionAndNormal(planeOrigin, planeNormal);
+    const distance = ray.intersectsPlane(plane);
+    
+    if (distance == null) {
       console.log("Could not determine position for new concept.");
       return;
     }
+    
+    const pos = ray.origin.add(ray.direction.scale(distance));
     
     const ConceptClass = ConceptMap[currentMode];
     const createdObject = new ConceptClass(this.scene, {
@@ -179,82 +289,7 @@ class ModeController {
       engine: this.engine
     });
     this.objects.push(createdObject);
-    this.selectedObject = createdObject.sphere;
     console.log(`Created ${currentMode} at`, pos.toString());
-  }
-    private handleWindowResize(): void {
-    this.engine.resize();
-  }
-
-  private _dragging: boolean = false;
-  private _dragOffset: Vector3 = Vector3.Zero();
-  private _dragPlaneOrigin: Vector3 | null = null;
-  private _dragPlaneNormal: Vector3 | null = null;
-
-  private handlePointerMove(event: PointerEvent): void {
-    if (!this._dragging || !this.selectedObject || !this._dragPlaneOrigin || !this._dragPlaneNormal) return;
-    // Move selected object to new pointer position (keep offset)
-    const ray = this.scene.createPickingRay(
-      this.scene.pointerX,
-      this.scene.pointerY,
-      Matrix.Identity(),
-      this.camera
-    );
-    const plane = Plane.FromPositionAndNormal(this._dragPlaneOrigin, this._dragPlaneNormal);
-    const distance = ray.intersectsPlane(plane);
-    const newPos = distance == null ? this._dragPlaneOrigin.clone() : ray.origin.add(ray.direction.scale(distance));
-    if (newPos) {
-      this.selectedObject.position.copyFrom(newPos.subtract(this._dragOffset));
-    }
-  }
-
-  private handlePointerUp(event: PointerEvent): void {
-    if (this._dragging) {
-      this._dragging = false;
-      this._dragOffset = Vector3.Zero();
-      this._dragPlaneOrigin = null;
-      this._dragPlaneNormal = null;
-    }
-    this.selectedObject = null;
-  }
-
-  private handleRightClick(event: MouseEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    // Toggle between orthographic and perspective modes
-    if (this.camera.mode === Camera.ORTHOGRAPHIC_CAMERA) {
-      // Switch to perspective mode
-      this.camera.mode = Camera.PERSPECTIVE_CAMERA;
-      console.log('Switched to Perspective mode');
-    } else {
-      // Switch to orthographic mode
-      this.camera.mode = Camera.ORTHOGRAPHIC_CAMERA;
-      // Configure orthographic camera properly
-      this.configureOrthographicCamera();
-      console.log('Switched to Orthographic mode');
-    }
-    
-    // Dispatch custom event for UI updates
-    window.dispatchEvent(new CustomEvent('cameraModeChanged', {
-      detail: { mode: this.camera.mode }
-    }));
-  }
-
-  private configureOrthographicCamera(): void {
-    if (this.camera instanceof ArcRotateCamera) {
-      // Set orthographic camera parameters
-      const aspectRatio = this.engine.getAspectRatio(this.camera);
-      const radius = this.camera.radius;
-      
-      // Calculate orthographic bounds based on camera radius
-      const orthoSize = radius * 0.8; // Adjust this multiplier as needed
-      
-      this.camera.orthoLeft = -orthoSize * aspectRatio;
-      this.camera.orthoRight = orthoSize * aspectRatio;
-      this.camera.orthoTop = orthoSize;
-      this.camera.orthoBottom = -orthoSize;
-    }
   }
 
   updateObjects(): void {

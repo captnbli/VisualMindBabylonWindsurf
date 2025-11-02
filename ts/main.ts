@@ -30,8 +30,10 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
     Vector3.Zero(), // target
     scene
   );
-  camera.attachControl(canvas, true);
-  camera.mode = Camera.ORTHOGRAPHIC_CAMERA; // Enable ortho mode
+  // Don't attach default controls - ModeController handles input
+  camera.mode = Camera.PERSPECTIVE_CAMERA;
+  // Use a narrower FOV to reduce perspective distortion at edges
+  camera.fov = 0.5; // Narrow FOV (in radians, ~28 degrees) for less distortion
   camera.parent = rig;
 
   // Limit zoom and rotation
@@ -60,26 +62,6 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
   // ModeController handles input and concept spawning
   ModeController.init({ scene, camera, engine });
 
-  // Add visual indicator for camera mode
-  const modeIndicator = document.createElement('div');
-  modeIndicator.style.position = 'absolute';
-  modeIndicator.style.top = '10px';
-  modeIndicator.style.left = '10px';
-  modeIndicator.style.color = 'white';
-  modeIndicator.style.fontFamily = 'Arial, sans-serif';
-  modeIndicator.style.fontSize = '14px';
-  modeIndicator.style.backgroundColor = 'rgba(0,0,0,0.5)';
-  modeIndicator.style.padding = '5px 10px';
-  modeIndicator.style.borderRadius = '3px';
-  modeIndicator.textContent = 'Camera Mode: Orthographic (Right-click to toggle)';
-  document.body.appendChild(modeIndicator);
-
-  // Update indicator when camera mode changes
-  scene.registerBeforeRender(() => {
-    const mode = camera.mode === Camera.ORTHOGRAPHIC_CAMERA ? 'Orthographic' : 'Perspective';
-    modeIndicator.textContent = `Camera Mode: ${mode} (Right-click to toggle)`;
-  });
-
   engine.runRenderLoop(() => {
     ModeController.updateObjects();
     scene.render();
@@ -92,6 +74,6 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 
 
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
-// Disable right-click context menu so Babylon camera orbit works
+// Disable right-click context menu
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 const scene = createScene(canvas);
