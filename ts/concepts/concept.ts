@@ -1,18 +1,19 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
-import { Color3, Color4, Vector3 } from "@babylonjs/core/Maths/math";
+import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
 import { Camera } from "@babylonjs/core/Cameras/camera";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { PBRMetallicRoughnessMaterial } from "@babylonjs/core/Materials/PBR/pbrMetallicRoughnessMaterial";
 import { AdvancedDynamicTexture } from "@babylonjs/gui/2D/advancedDynamicTexture";
-import { TextBlock, Rectangle } from "@babylonjs/gui/2D/controls";
-import { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
+import { TextBlock } from "@babylonjs/gui/2D/controls";
+import { Control } from "@babylonjs/gui/2D/controls/control";
 
 interface ConceptOptions {
   color?: Color3;
   label?: string;
+  textColor?: string;
   radius?: number;
   position?: Vector3;
   camera?: Camera;
@@ -25,17 +26,20 @@ class Concept {
   engine?: Engine;
   color: Color3;
   label: string;
+  textColor: string;
   radius: number;
   position: Vector3;
   labelCount: number = 2;
   sphere: Mesh;
-  // textBox: TextBlock;
-  labelPlanes: Mesh[] = [];
+  private labelBand: Mesh | null = null;
+  private labelBandTexture: AdvancedDynamicTexture | null = null;
+  private labelTextBlocks: TextBlock[] = [];
 
   constructor(scene: Scene, options: ConceptOptions = {}) {
     this.scene = scene;
     this.color = options.color || Color3.Red();
     this.label = options.label || '';
+    this.textColor = options.textColor || "#ffffff";
     this.radius = options.radius ?? 1;
     this.position = options.position ?? new Vector3(0, 0, 0);
     this.camera = options.camera;
@@ -58,73 +62,95 @@ class Concept {
     this.sphere.material = mat;
     this.sphere.position = this.position;
     console.log("[CONCEPT] Created metallic sphere at", this.position.toString());
-    // Add label planes and GUI
-    this.addLabels();
+    this.ensureLabelBand();
+    this.updateLabelBandText();
     this.sphere.refreshBoundingInfo(true);
-    // this.createTextBox();
   }
 
-  private addLabels(): void {
-    const textureSize = 1024;
-    const texture = new AdvancedDynamicTexture("LabelTexture", textureSize, textureSize, this.scene);
-    const text = new TextBlock();
-    text.text = this.label;
-    text.color = "white";
-    text.fontSize = 200;
-    texture.addControl(text);
-
-    for (let i = 0; i < this.labelCount; i++) {
-      const angle = (i / this.labelCount) * Math.PI * 2;
-      const x = Math.cos(angle) * (this.radius + 0.1);
-      const z = Math.sin(angle) * (this.radius + 0.1);
-
-      const labelPlane = MeshBuilder.CreatePlane("labelPlane", { size: this.radius }, this.scene);
-      labelPlane.position.set(x, 0, z);
-      labelPlane.material = new StandardMaterial("labelMat", this.scene);
-      const labelMat = labelPlane.material as StandardMaterial;
-      labelMat.diffuseTexture = texture;
-      labelMat.useAlphaFromDiffuseTexture = true;
-
-      this.labelPlanes.push(labelPlane);
-      this.sphere.addChild(labelPlane);
+  private ensureLabelBand(): void {
+    if (this.labelBand && this.labelBandTexture && this.labelTextBlocks.length === 2) {
+      return;
     }
+
+    const bandHeight = Math.max(0.25, this.radius * 0.35);
+    this.labelBand = MeshBuilder.CreateCylinder(
+      "labelBand",
+      {
+        diameterTop: this.radius * 2 + 0.04,
+        diameterBottom: this.radius * 2 + 0.04,
+        height: bandHeight,
+        tessellation: 128,
+      },
+      this.scene
+    );
+    this.labelBand.parent = this.sphere;
+    this.labelBand.position.set(0, 0, 0);
+
+    const bandMat = new StandardMaterial("labelBandMat", this.scene);
+    bandMat.disableLighting = true;
+    bandMat.emissiveColor = Color3.Black();
+    bandMat.specularColor = Color3.Black();
+    bandMat.backFaceCulling = false;
+    bandMat.zOffset = -2;
+    this.labelBand.material = bandMat;
+
+    this.labelBandTexture = AdvancedDynamicTexture.CreateForMesh(
+      this.labelBand,
+      2048,
+      256,
+      false
+    );
+    bandMat.diffuseTexture = this.labelBandTexture;
+    if (bandMat.diffuseTexture) {
+      bandMat.diffuseTexture.uScale = -1;
+      bandMat.diffuseTexture.uOffset = 1;
+    }
+    bandMat.useAlphaFromDiffuseTexture = true;
+
+    const leftText = new TextBlock("labelLeft");
+    leftText.width = "48%";
+    leftText.height = "100%";
+    leftText.left = "-26%";
+    leftText.color = this.textColor;
+    leftText.fontSize = 150;
+    leftText.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+    leftText.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
+
+    const rightText = new TextBlock("labelRight");
+    rightText.width = "48%";
+    rightText.height = "100%";
+    rightText.left = "26%";
+    rightText.color = this.textColor;
+    rightText.fontSize = 150;
+    rightText.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+    rightText.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
+
+    this.labelBandTexture.addControl(leftText);
+    this.labelBandTexture.addControl(rightText);
+    this.labelTextBlocks = [leftText, rightText];
   }
 
-  private createTextBox(): void {
-    const advancedTexture = AdvancedDynamicTexture.CreateFullscreenUI("UI");
-    const rect = new Rectangle();
-    rect.width = "220px";
-    rect.height = "100px";
-    rect.cornerRadius = 20;
-    rect.color = "White";
-    rect.thickness = 4;
-    rect.background = "green";
-    advancedTexture.addControl(rect);
-
-    const label = new TextBlock();
-    label.text = "";
-    label.color = "white";
-    rect.addControl(label);
-
-    this.textBox = label;
-  }
-
-  private updateTextBoxPosition(): void {
-    // Placeholder for actual camera-to-GUI alignment logic
+  private updateLabelBandText(): void {
+    this.ensureLabelBand();
+    this.labelTextBlocks.forEach((textBlock) => {
+      textBlock.text = this.label;
+      textBlock.color = this.textColor;
+    });
   }
 
   public update(): void {
-    // Spheres are rotationally symmetric so they don't need to face the camera
-    // They should appear circular naturally with proper camera FOV settings
+    // Gentle spin to communicate object liveliness while preserving attached labels.
+    this.sphere.rotation.y += 0.003;
+  }
 
-    // Update labels to face camera
-    if (this.camera) {
-      this.labelPlanes.forEach(plane => {
-        plane.lookAt(this.camera!.position);
-      });
-    }
+  public setOverlayText(newText: string): void {
+    const trimmed = newText.slice(0, 12);
+    this.label = trimmed;
+    this.updateLabelBandText();
+  }
 
-    this.updateTextBoxPosition();
+  public getOverlayText(): string {
+    return this.label;
   }
 }
 

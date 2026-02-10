@@ -1,18 +1,11 @@
 import "./set_babylon_global";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
-import { Color3, Color4, Vector3, Matrix } from "@babylonjs/core/Maths/math";
-import { Viewport } from "@babylonjs/core/Maths/math.viewport";
-import { Camera, ArcRotateCamera, FreeCamera, TargetCamera } from "@babylonjs/core/Cameras";
-import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { Color4, Vector3 } from "@babylonjs/core/Maths/math";
+import { Camera, ArcRotateCamera } from "@babylonjs/core/Cameras";
 import { DirectionalLight, HemisphericLight } from "@babylonjs/core/Lights";
-import { Plane } from "@babylonjs/core/Maths/math.plane";
-import { CubeTexture } from "@babylonjs/core/Materials/Textures/cubeTexture";
-import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
-import { computeOrthoMatchForPerspective } from "@babylonjs/core/Cameras/perspectiveConverters";
 import ModeController from './mode_controller';
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-
 export function createScene(canvas: HTMLCanvasElement): Scene {
   const engine = new Engine(canvas, true);
   const scene = new Scene(engine);
@@ -25,7 +18,7 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
   const camera = new ArcRotateCamera(
     "camera",
     Math.PI / 2, // alpha (horizontal rotation)
-    Math.PI / 3, // beta (vertical angle)
+    Math.PI / 2, // beta (vertical angle at equator)
     100,         // radius
     Vector3.Zero(), // target
     scene
@@ -39,8 +32,9 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
   // Limit zoom and rotation
   camera.lowerRadiusLimit = 20;
   camera.upperRadiusLimit = 500;
-  camera.lowerBetaLimit = 0.01;
-  camera.upperBetaLimit = Math.PI / 2.2;
+  // Allow full orbit around the model (avoid exact poles to prevent singularity).
+  camera.lowerBetaLimit = 0.05;
+  camera.upperBetaLimit = Math.PI - 0.05;
 
   // Ambient hemispheric light for soft fill
   const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), scene);

@@ -5,7 +5,8 @@ import { Scene } from "@babylonjs/core/scene";
 export default class Reference extends Concept {
   constructor(scene: Scene, options: ConceptOptions = {}) {
     options.color = new Color3(0.2, 0.2, 0.7); // Muted blue, adjust as needed
-    options.label = 'R';
+    options.textColor = "#ffffff";
+    options.label = '';
     super(scene, options);
   }
 }

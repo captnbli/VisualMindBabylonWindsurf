@@ -5,7 +5,8 @@ import { Scene } from "@babylonjs/core/scene";
 export default class Plus extends Concept {
   constructor(scene: Scene, options: ConceptOptions = {}) {
     options.color = new Color3(0, 0.5, 0); // Green, normalised
-    options.label = 'P'; // Or use Types.Plus if you want
+    options.textColor = "#ffffff";
+    options.label = '';
     super(scene, options);
   }
 }

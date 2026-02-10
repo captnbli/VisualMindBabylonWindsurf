@@ -65,10 +65,17 @@ class ModeController {
   
   // Camera rotation state
   private _isRotating: boolean = false;
+  private _isPanning: boolean = false;
   private _isPointerDown: boolean = false;
+  private _activeButton: number | null = null;
+  private _activePointerId: number | null = null;
   private _lastPointerX: number = 0;
   private _lastPointerY: number = 0;
   private _hasMoved: boolean = false;
+  private _draggedSphere: Mesh | null = null;
+  private _dragPlane: Plane | null = null;
+  private _dragOffset: Vector3 = Vector3.Zero();
+  private _selectedConcept: any | null = null;
 
   init({ scene, camera, engine }: ModeControllerConfig): void {
     this.scene = scene;
@@ -99,6 +106,7 @@ class ModeController {
       canvas.addEventListener('pointerdown', (event) => this.handlePointerDown(event), false);
       canvas.addEventListener('pointermove', (event) => this.handlePointerMove(event), false);
       canvas.addEventListener('pointerup', (event) => this.handlePointerUp(event), false);
+      canvas.addEventListener('dblclick', (event) => this.handleDoubleClick(event), false);
       canvas.addEventListener('wheel', (event) => this.handleWheel(event), false);
       // Prevent context menu
       canvas.addEventListener('contextmenu', (event) => event.preventDefault(), false);
@@ -107,6 +115,29 @@ class ModeController {
   }
 
   private handleKeydown(event: KeyboardEvent): void {
+    if (this._selectedConcept) {
+      if (event.key === 'Escape' || event.key === 'Enter') {
+        this._selectedConcept = null;
+        return;
+      }
+
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        const current = this._selectedConcept.getOverlayText?.() ?? '';
+        this._selectedConcept.setOverlayText?.(current.slice(0, -1));
+        return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.length === 1) {
+        event.preventDefault();
+        const current = this._selectedConcept.getOverlayText?.() ?? '';
+        if (current.length < 12) {
+          this._selectedConcept.setOverlayText?.(current + event.key);
+        }
+        return;
+      }
+    }
+
     const key = event.key.toLowerCase();
     const matchedMode = this.keyMap[key];
     if (matchedMode) {
@@ -117,13 +148,19 @@ class ModeController {
   }
 
   private handlePointerDown(event: PointerEvent): void {
-    // Only respond to left mouse button
-    if (event.button !== 0) return;
+    // Left button: create/rotate behavior. Right button: pan behavior.
+    if (event.button !== 0 && event.button !== 2) return;
     event.preventDefault();
     event.stopPropagation();
 
     // Mark pointer as down
     this._isPointerDown = true;
+    this._activeButton = event.button;
+    this._activePointerId = event.pointerId;
+    this._isPanning = event.button === 2;
+    this._draggedSphere = null;
+    this._dragPlane = null;
+    this._dragOffset = Vector3.Zero();
 
     // Update scene pointer position for picking
     const canvas = this.engine.getRenderingCanvas();
@@ -134,17 +171,47 @@ class ModeController {
     this.scene.pointerY = event.clientY - rect.top;
     this._lastPointerX = event.clientX - rect.left;
     this._lastPointerY = event.clientY - rect.top;
+    if (canvas.setPointerCapture) {
+      canvas.setPointerCapture(event.pointerId);
+    }
 
-    // Check if we clicked on a sphere - if so, do nothing (spheres don't move)
+    // For right-click pan, do not run placement/mesh checks.
+    if (event.button === 2) {
+      this._isRotating = false;
+      this._hasMoved = false;
+      return;
+    }
+
+    // Check if we clicked on a sphere - if so, start dragging it.
     const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => {
       return mesh && mesh.name.startsWith('sphere');
     });
 
     if (pickResult && pickResult.hit && pickResult.pickedMesh) {
-      // Sphere clicked - do nothing, spheres are fixed
-      this._isPointerDown = false;
+      this._draggedSphere = pickResult.pickedMesh as Mesh;
+      this._selectedConcept = this.getConceptFromSphere(this._draggedSphere);
+      const dragPlaneNormal = this.camera.getTarget().subtract(this.camera.position).normalize();
+      const dragPlaneOrigin = pickResult.pickedPoint ?? this._draggedSphere.position.clone();
+      this._dragPlane = Plane.FromPositionAndNormal(dragPlaneOrigin, dragPlaneNormal);
+      const ray = this.scene.createPickingRay(
+        this.scene.pointerX,
+        this.scene.pointerY,
+        Matrix.Identity(),
+        this.camera
+      );
+      const hitDistance = ray.intersectsPlane(this._dragPlane);
+      if (hitDistance != null) {
+        const hitPoint = ray.origin.add(ray.direction.scale(hitDistance));
+        this._dragOffset = this._draggedSphere.position.subtract(hitPoint);
+      } else {
+        this._dragOffset = Vector3.Zero();
+      }
+      this._isRotating = false;
+      this._hasMoved = false;
       return;
     }
+
+    this._selectedConcept = null;
 
     // Reset rotation state - we'll create concept on pointer up if not dragged
     this._isRotating = false; // Start as false, will be set to true on drag
@@ -154,7 +221,30 @@ class ModeController {
     this.engine.resize();
   }
 
+  private handleDoubleClick(event: MouseEvent): void {
+    if (event.button !== 0) return;
+    const canvas = this.engine.getRenderingCanvas();
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    this.scene.pointerX = event.clientX - rect.left;
+    this.scene.pointerY = event.clientY - rect.top;
+
+    const pickResult = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => {
+      return mesh && mesh.name.startsWith('sphere');
+    });
+
+    if (pickResult && pickResult.hit && pickResult.pickedMesh) {
+      const concept = this.getConceptFromSphere(pickResult.pickedMesh as Mesh);
+      if (concept) {
+        this._selectedConcept = concept;
+        this._selectedConcept.setOverlayText?.('');
+      }
+    }
+  }
+
   private handlePointerMove(event: PointerEvent): void {
+    if (this._activePointerId !== null && event.pointerId !== this._activePointerId) return;
     const canvas = this.engine.getRenderingCanvas();
     if (!canvas) return;
     
@@ -176,34 +266,81 @@ class ModeController {
     
     if (Math.abs(deltaX) > moveThreshold || Math.abs(deltaY) > moveThreshold) {
       this._hasMoved = true;
-      // Start rotating if we're dragging
-      if (!this._isRotating) {
+      // Start rotating only when not panning or dragging a sphere.
+      if (!this._isRotating && !this._isPanning && !this._draggedSphere) {
         this._isRotating = true;
       }
     }
+
+    // Left mouse drag moves the picked sphere in a camera-facing plane.
+    if (this._draggedSphere && this._dragPlane) {
+      const ray = this.scene.createPickingRay(
+        this.scene.pointerX,
+        this.scene.pointerY,
+        Matrix.Identity(),
+        this.camera
+      );
+      const dragDistance = ray.intersectsPlane(this._dragPlane);
+      if (dragDistance != null) {
+        const dragPoint = ray.origin.add(ray.direction.scale(dragDistance));
+        this._draggedSphere.position = dragPoint.add(this._dragOffset);
+      }
+      this._lastPointerX = currentX;
+      this._lastPointerY = currentY;
+      return;
+    }
     
+    // Right mouse drag pans camera target in camera plane.
+    if (this._isPanning) {
+      const target = this.camera.getTarget();
+      const forward = target.subtract(this.camera.position).normalize();
+      const worldUp = Vector3.Up();
+      let right = Vector3.Cross(forward, worldUp);
+      if (right.lengthSquared() < 1e-6) {
+        right = Vector3.Right();
+      } else {
+        right.normalize();
+      }
+      const up = Vector3.Cross(right, forward).normalize();
+
+      const panScale = this.camera.radius * 0.0006;
+      // Drag-to-pan: scene content follows mouse direction on screen.
+      const panOffset = right.scale(deltaX * panScale).add(up.scale(-deltaY * panScale));
+      this.camera.setTarget(target.add(panOffset));
+
+      this._lastPointerX = currentX;
+      this._lastPointerY = currentY;
+      return;
+    }
+
     if (!this._isRotating) return;
     
-    // Convert pixel movement to camera rotation
-    // Horizontal movement rotates around Y axis (alpha)
-    // Vertical movement rotates around X axis (beta)
-    const rotationSpeed = 0.01;
+    // Rotation speed scales with zoom level for a more natural feel.
+    const baseRotationSpeed = 0.001;
+    const rotationSpeed = baseRotationSpeed * (100 / Math.max(this.camera.radius, 20));
     this.camera.alpha -= deltaX * rotationSpeed;
     this.camera.beta += deltaY * rotationSpeed;
     
-    // Clamp beta to reasonable limits
-    this.camera.beta = Math.max(0.01, Math.min(Math.PI / 2.2, this.camera.beta));
+    // Clamp beta using camera limits so startup/view constraints stay consistent.
+    const lowerBeta = this.camera.lowerBetaLimit ?? 0.01;
+    const upperBeta = this.camera.upperBetaLimit ?? Math.PI / 2;
+    this.camera.beta = Math.max(lowerBeta, Math.min(upperBeta, this.camera.beta));
     
     this._lastPointerX = currentX;
     this._lastPointerY = currentY;
   }
 
   private handlePointerUp(event: PointerEvent): void {
-    // Only handle if this was the left button we were tracking
+    if (this._activePointerId !== null && event.pointerId !== this._activePointerId) return;
+    // Only handle if this was the button we were tracking
     if (!this._isPointerDown) return;
     
+    if (this._activeButton === 0 && !this._hasMoved && this._draggedSphere) {
+      this._selectedConcept = this.getConceptFromSphere(this._draggedSphere);
+    }
+
     // If we didn't move much and a mode is active, create a concept
-    if (!this._hasMoved && !this._isRotating) {
+    if (this._activeButton === 0 && !this._hasMoved && !this._isRotating && !this._draggedSphere) {
       const currentMode = this.getMode();
       if (currentMode && ConceptMap[currentMode]) {
         // Update pointer position one more time
@@ -220,18 +357,33 @@ class ModeController {
     // Reset all state
     this._isPointerDown = false;
     this._isRotating = false;
+    this._isPanning = false;
     this._hasMoved = false;
+    this._draggedSphere = null;
+    this._dragPlane = null;
+    this._dragOffset = Vector3.Zero();
+    this._activeButton = null;
+    if (this._activePointerId !== null) {
+      const canvas = this.engine.getRenderingCanvas();
+      if (canvas && canvas.releasePointerCapture) {
+        try {
+          canvas.releasePointerCapture(this._activePointerId);
+        } catch {
+          // Ignore if not captured.
+        }
+      }
+    }
+    this._activePointerId = null;
   }
 
   private handleWheel(event: WheelEvent): void {
     event.preventDefault();
     event.stopPropagation();
     
-    // Zoom camera forward/back by changing radius
-    const zoomSpeed = 2;
-    const delta = event.deltaY > 0 ? zoomSpeed : -zoomSpeed;
-    
-    this.camera.radius += delta;
+    // Multiplicative zoom feels natural at both near and far distances.
+    const zoomFactor = 1.1;
+    const delta = event.deltaY > 0 ? zoomFactor : 1 / zoomFactor;
+    this.camera.radius *= delta;
     
     // Clamp radius to limits
     if (this.camera.lowerRadiusLimit !== null) {
@@ -288,8 +440,21 @@ class ModeController {
       camera: this.camera,
       engine: this.engine
     });
+    if (createdObject?.sphere) {
+      const metadata = createdObject.sphere.metadata ?? {};
+      createdObject.sphere.metadata = { ...metadata, conceptRef: createdObject };
+    }
     this.objects.push(createdObject);
+    this._selectedConcept = createdObject;
     console.log(`Created ${currentMode} at`, pos.toString());
+  }
+
+  private getConceptFromSphere(sphere: Mesh | null): any | null {
+    if (!sphere) return null;
+    const metadataConcept = sphere.metadata?.conceptRef;
+    if (metadataConcept) return metadataConcept;
+    const matched = this.objects.find((object) => object?.sphere === sphere);
+    return matched ?? null;
   }
 
   updateObjects(): void {
