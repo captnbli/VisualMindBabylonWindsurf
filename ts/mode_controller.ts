@@ -1,10 +1,11 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
-import { Vector3, Matrix } from "@babylonjs/core/Maths/math";
+import { Vector3, Matrix, Quaternion } from "@babylonjs/core/Maths/math";
 import { Camera } from "@babylonjs/core/Cameras/camera";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 
 import { ConceptMap } from "./concepts/concept_map";
 import { Mode, Types } from "./concepts/types";
@@ -13,9 +14,9 @@ interface ModeControllerConfig {
   scene: Scene;
   camera: Camera;
   engine: Engine;
+  worldRoot: TransformNode;
 }
 
-const PLACEMENT_PLANE_DISTANCE = 20;
 const DRAG_THRESHOLD_PX = 3;
 
 enum InputState {
@@ -45,6 +46,7 @@ class ModeController {
   private scene!: Scene;
   private camera!: ArcRotateCamera;
   private engine!: Engine;
+  private worldRoot!: TransformNode;
   private objects: any[] = [];
 
   private inputState: InputState = InputState.Idle;
@@ -59,9 +61,11 @@ class ModeController {
   private dragOffset: Vector3 = Vector3.Zero();
 
   private selectedConcept: any | null = null;
-  private readonly orbitTarget: Vector3 = Vector3.Zero();
+  private readonly homePlaneOrigin: Vector3 = Vector3.Zero();
+  private homePlaneNormal: Vector3 = Vector3.Forward();
+  private homeCameraRadius: number = 100;
 
-  init({ scene, camera, engine }: ModeControllerConfig): void {
+  init({ scene, camera, engine, worldRoot }: ModeControllerConfig): void {
     this.scene = scene;
     if (!(camera instanceof ArcRotateCamera)) {
       throw new Error("Camera must be an ArcRotateCamera");
@@ -69,6 +73,12 @@ class ModeController {
 
     this.camera = camera;
     this.engine = engine;
+    this.worldRoot = worldRoot;
+    this.worldRoot.rotationQuaternion = this.worldRoot.rotationQuaternion ?? Quaternion.Identity();
+    const initialForward = this.camera.getTarget().subtract(this.camera.position).normalize();
+    // Home plane faces the camera and passes through origin.
+    this.homePlaneNormal = initialForward.scale(-1);
+    this.homeCameraRadius = this.camera.radius;
     this.mode = Types.Answer;
     this.attachEventListeners();
   }
@@ -92,7 +102,6 @@ class ModeController {
     canvas.addEventListener("pointerdown", (event) => this.handlePointerDown(event), false);
     canvas.addEventListener("pointermove", (event) => this.handlePointerMove(event), false);
     canvas.addEventListener("pointerup", (event) => this.handlePointerUp(event), false);
-    canvas.addEventListener("dblclick", (event) => this.handleDoubleClick(event), false);
     canvas.addEventListener("wheel", (event) => this.handleWheel(event), false);
     canvas.addEventListener("contextmenu", (event) => event.preventDefault(), false);
 
@@ -103,6 +112,12 @@ class ModeController {
     if (this.selectedConcept) {
       if (event.key === "Escape" || event.key === "Enter") {
         this.selectedConcept = null;
+        return;
+      }
+
+      if (event.key === "Delete") {
+        event.preventDefault();
+        this.deleteSelectedConcept();
         return;
       }
 
@@ -164,6 +179,12 @@ class ModeController {
     }
 
     if (event.button === 2) {
+      const spherePick = this.pickSphereAtScenePointer();
+      if (spherePick && spherePick.hit && spherePick.pickedMesh) {
+        // Ignore right-drag gestures that start on a sphere to avoid unintended artifacts.
+        this.resetPointerInteraction();
+        return;
+      }
       this.inputState = InputState.Panning;
       return;
     }
@@ -171,7 +192,8 @@ class ModeController {
     const spherePick = this.pickSphereAtScenePointer();
     if (spherePick && spherePick.hit && spherePick.pickedMesh) {
       this.draggedSphere = spherePick.pickedMesh as Mesh;
-      this.selectedConcept = this.getConceptFromSphere(this.draggedSphere);
+      // Mouse-down on sphere enters move mode; entry mode starts on release.
+      this.selectedConcept = null;
 
       const dragPlaneNormal = this.camera.getTarget().subtract(this.camera.position).normalize();
       const dragPlaneOrigin = spherePick.pickedPoint ?? this.draggedSphere.position.clone();
@@ -234,7 +256,8 @@ class ModeController {
       const dragDistance = ray.intersectsPlane(this.dragPlane);
       if (dragDistance != null) {
         const dragPoint = ray.origin.add(ray.direction.scale(dragDistance));
-        this.draggedSphere.position = dragPoint.add(this.dragOffset);
+        const desiredWorldPos = dragPoint.add(this.dragOffset);
+        this.draggedSphere.position = this.worldToRootLocal(desiredWorldPos);
       }
       this.lastPointerX = pointer.x;
       this.lastPointerY = pointer.y;
@@ -242,8 +265,7 @@ class ModeController {
     }
 
     if (this.inputState === InputState.Panning) {
-      const target = this.camera.getTarget();
-      const forward = target.subtract(this.camera.position).normalize();
+      const forward = this.camera.getTarget().subtract(this.camera.position).normalize();
       const worldUp = Vector3.Up();
       let right = Vector3.Cross(forward, worldUp);
       if (right.lengthSquared() < 1e-6) {
@@ -255,7 +277,7 @@ class ModeController {
 
       const panScale = this.camera.radius * 0.0006;
       const panOffset = right.scale(deltaX * panScale).add(up.scale(deltaY * panScale));
-      this.camera.setTarget(target.add(panOffset));
+      this.worldRoot.position = this.worldRoot.position.add(panOffset);
 
       this.lastPointerX = pointer.x;
       this.lastPointerY = pointer.y;
@@ -263,16 +285,7 @@ class ModeController {
     }
 
     if (this.inputState === InputState.Rotating) {
-      // Rotate as a true world spin around a fixed center target.
-      this.camera.setTarget(this.orbitTarget);
-      const baseRotationSpeed = 0.003;
-      const rotationSpeed = baseRotationSpeed * (100 / Math.max(this.camera.radius, 20));
-      this.camera.alpha += deltaX * rotationSpeed;
-      this.camera.beta -= deltaY * rotationSpeed;
-
-      const lowerBeta = this.camera.lowerBetaLimit ?? 0.01;
-      const upperBeta = this.camera.upperBetaLimit ?? Math.PI / 2;
-      this.camera.beta = Math.max(lowerBeta, Math.min(upperBeta, this.camera.beta));
+      this.rotateModel(deltaX, deltaY);
     }
 
     this.lastPointerX = pointer.x;
@@ -284,38 +297,14 @@ class ModeController {
       return;
     }
 
-    if (this.activeButton === 0 && this.inputState === InputState.DraggingSphere && !this.hasMoved) {
+    if (this.activeButton === 0 && this.inputState === InputState.DraggingSphere) {
       this.selectedConcept = this.getConceptFromSphere(this.draggedSphere);
     }
 
     if (this.activeButton === 0 && this.inputState === InputState.PointerArmed && !this.hasMoved) {
       this.createConceptAtPointer();
     }
-
     this.resetPointerInteraction();
-  }
-
-  private handleDoubleClick(event: MouseEvent): void {
-    if (event.button !== 0) {
-      return;
-    }
-
-    const pointer = this.getPointerPosition(event);
-    if (!pointer) {
-      return;
-    }
-
-    this.scene.pointerX = pointer.x;
-    this.scene.pointerY = pointer.y;
-
-    const spherePick = this.pickSphereAtScenePointer();
-    if (spherePick && spherePick.hit && spherePick.pickedMesh) {
-      const concept = this.getConceptFromSphere(spherePick.pickedMesh as Mesh);
-      if (concept) {
-        this.selectedConcept = concept;
-        this.selectedConcept.setOverlayText?.("");
-      }
-    }
   }
 
   private handleWheel(event: WheelEvent): void {
@@ -376,13 +365,35 @@ class ModeController {
     this.dragOffset = Vector3.Zero();
   }
 
-  // Get the placement plane position (20 units from camera to center)
+  private rotateModel(deltaX: number, deltaY: number): void {
+    const baseRotationSpeed = 0.00045;
+    const rotationSpeed = baseRotationSpeed * (100 / Math.max(this.camera.radius, 20));
+    const yaw = -deltaX * rotationSpeed;
+    const pitch = -deltaY * rotationSpeed;
+
+    const viewDir = this.camera.getTarget().subtract(this.camera.position).normalize();
+    let cameraRight = Vector3.Cross(viewDir, Vector3.Up());
+    if (cameraRight.lengthSquared() < 1e-8) {
+      cameraRight = Vector3.Right();
+    } else {
+      cameraRight.normalize();
+    }
+
+    const yawQ = Quaternion.RotationAxis(Vector3.Up(), yaw);
+    const pitchQ = Quaternion.RotationAxis(cameraRight, pitch);
+    const stepQ = yawQ.multiply(pitchQ);
+    const currentQ = this.worldRoot.rotationQuaternion ?? Quaternion.Identity();
+    this.worldRoot.rotationQuaternion = stepQ.multiply(currentQ).normalize();
+  }
+
+  // Home plane goes through origin and is parallel to the initial camera view.
+  // Zoom shifts placement to parallel planes along the home-plane normal.
   private getPlacementPlane(): { origin: Vector3; normal: Vector3 } {
-    const forward = this.camera.getTarget().subtract(this.camera.position).normalize();
-    const planeOrigin = this.camera.position.add(forward.scale(PLACEMENT_PLANE_DISTANCE));
+    const zoomDelta = (this.camera.radius - this.homeCameraRadius) * 0.5;
+    const planeOrigin = this.homePlaneOrigin.add(this.homePlaneNormal.scale(zoomDelta));
     return {
       origin: planeOrigin,
-      normal: forward,
+      normal: this.homePlaneNormal,
     };
   }
 
@@ -410,15 +421,17 @@ class ModeController {
     }
 
     const pos = ray.origin.add(ray.direction.scale(distance));
+    const localPos = this.worldToRootLocal(pos);
 
     const ConceptClass = ConceptMap[currentMode];
     const createdObject = new ConceptClass(this.scene, {
-      position: pos,
+      position: localPos,
       camera: this.camera,
       engine: this.engine,
     });
 
     if (createdObject?.sphere) {
+      createdObject.sphere.parent = this.worldRoot;
       const metadata = createdObject.sphere.metadata ?? {};
       createdObject.sphere.metadata = { ...metadata, conceptRef: createdObject };
     }
@@ -438,6 +451,29 @@ class ModeController {
     }
     const matched = this.objects.find((object) => object?.sphere === sphere);
     return matched ?? null;
+  }
+
+  private worldToRootLocal(worldPos: Vector3): Vector3 {
+    this.worldRoot.computeWorldMatrix(true);
+    const inv = this.worldRoot.getWorldMatrix().clone();
+    inv.invert();
+    return Vector3.TransformCoordinates(worldPos, inv);
+  }
+
+  private deleteSelectedConcept(): void {
+    if (!this.selectedConcept) {
+      return;
+    }
+    const conceptToDelete = this.selectedConcept;
+    this.objects = this.objects.filter((object) => object !== conceptToDelete);
+    const sphere = conceptToDelete?.sphere as Mesh | undefined;
+    if (sphere) {
+      sphere.dispose(false, true);
+    }
+    if (this.draggedSphere === sphere) {
+      this.draggedSphere = null;
+    }
+    this.selectedConcept = null;
   }
 
   updateObjects(): void {

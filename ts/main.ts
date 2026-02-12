@@ -13,13 +13,14 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 
   // Create a rig node to parent camera and lights
   const rig = new TransformNode("cameraRig", scene);
+  const worldRoot = new TransformNode("worldRoot", scene);
 
   // ArcRotateCamera around origin
   const camera = new ArcRotateCamera(
     "camera",
     Math.PI / 2, // alpha (horizontal rotation)
     Math.PI / 2, // beta (vertical angle at equator)
-    100,         // radius
+    50,          // radius
     Vector3.Zero(), // target
     scene
   );
@@ -54,7 +55,7 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
   });
 
   // ModeController handles input and concept spawning
-  ModeController.init({ scene, camera, engine });
+  ModeController.init({ scene, camera, engine, worldRoot });
 
   engine.runRenderLoop(() => {
     ModeController.updateObjects();
