@@ -6,6 +6,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import { Plane } from "@babylonjs/core/Maths/math.plane";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import Connector from "./concepts/connector";
 
 import { ConceptMap } from "./concepts/concept_map";
 import { Mode, Types } from "./concepts/types";
@@ -25,6 +26,7 @@ enum InputState {
   Rotating = "rotating",
   Panning = "panning",
   DraggingSphere = "dragging_sphere",
+  ConnectorLinking = "connector_linking",
 }
 
 class ModeController {
@@ -59,6 +61,9 @@ class ModeController {
   private draggedSphere: Mesh | null = null;
   private dragPlane: Plane | null = null;
   private dragOffset: Vector3 = Vector3.Zero();
+  private connectorStartSphere: Mesh | null = null;
+  private connectorDragPlane: Plane | null = null;
+  private connectorPreview: Connector | null = null;
 
   private selectedConcept: any | null = null;
   private readonly homePlaneOrigin: Vector3 = Vector3.Zero();
@@ -172,6 +177,8 @@ class ModeController {
     this.draggedSphere = null;
     this.dragPlane = null;
     this.dragOffset = Vector3.Zero();
+    this.connectorStartSphere = null;
+    this.connectorDragPlane = null;
 
     const canvas = this.engine.getRenderingCanvas();
     if (canvas?.setPointerCapture) {
@@ -181,8 +188,10 @@ class ModeController {
     if (event.button === 2) {
       const spherePick = this.pickSphereAtScenePointer();
       if (spherePick && spherePick.hit && spherePick.pickedMesh) {
-        // Ignore right-drag gestures that start on a sphere to avoid unintended artifacts.
-        this.resetPointerInteraction();
+        this.connectorStartSphere = spherePick.pickedMesh as Mesh;
+        const forward = this.camera.getTarget().subtract(this.camera.position).normalize();
+        this.connectorDragPlane = Plane.FromPositionAndNormal(this.connectorStartSphere.getAbsolutePosition(), forward);
+        this.inputState = InputState.ConnectorLinking;
         return;
       }
       this.inputState = InputState.Panning;
@@ -284,6 +293,35 @@ class ModeController {
       return;
     }
 
+    if (this.inputState === InputState.ConnectorLinking && this.connectorStartSphere) {
+      const startLocal = this.connectorStartSphere.position.clone();
+      let endLocal: Vector3 | null = null;
+      const targetPick = this.pickSphereAtScenePointer();
+      if (targetPick && targetPick.hit && targetPick.pickedMesh && targetPick.pickedMesh !== this.connectorStartSphere) {
+        endLocal = (targetPick.pickedMesh as Mesh).position.clone();
+      } else if (this.connectorDragPlane) {
+        const ray = this.scene.createPickingRay(
+          this.scene.pointerX,
+          this.scene.pointerY,
+          Matrix.Identity(),
+          this.camera
+        );
+        const distance = ray.intersectsPlane(this.connectorDragPlane);
+        if (distance != null) {
+          const worldPoint = ray.origin.add(ray.direction.scale(distance));
+          endLocal = this.worldToRootLocal(worldPoint);
+        }
+      }
+
+      if (endLocal) {
+        this.updateConnectorPreview(startLocal, endLocal);
+      }
+
+      this.lastPointerX = pointer.x;
+      this.lastPointerY = pointer.y;
+      return;
+    }
+
     if (this.inputState === InputState.Rotating) {
       this.rotateModel(deltaX, deltaY);
     }
@@ -303,6 +341,12 @@ class ModeController {
 
     if (this.activeButton === 0 && this.inputState === InputState.PointerArmed && !this.hasMoved) {
       this.createConceptAtPointer();
+    }
+    if (this.activeButton === 2 && this.inputState === InputState.ConnectorLinking && this.connectorStartSphere) {
+      const targetPick = this.pickSphereAtScenePointer();
+      if (targetPick && targetPick.hit && targetPick.pickedMesh && targetPick.pickedMesh !== this.connectorStartSphere) {
+        this.createPermanentConnector(this.connectorStartSphere.position.clone(), (targetPick.pickedMesh as Mesh).position.clone());
+      }
     }
     this.resetPointerInteraction();
   }
@@ -363,6 +407,9 @@ class ModeController {
     this.draggedSphere = null;
     this.dragPlane = null;
     this.dragOffset = Vector3.Zero();
+    this.connectorStartSphere = null;
+    this.connectorDragPlane = null;
+    this.disposeConnectorPreview();
   }
 
   private rotateModel(deltaX: number, deltaY: number): void {
@@ -466,14 +513,52 @@ class ModeController {
     }
     const conceptToDelete = this.selectedConcept;
     this.objects = this.objects.filter((object) => object !== conceptToDelete);
-    const sphere = conceptToDelete?.sphere as Mesh | undefined;
-    if (sphere) {
-      sphere.dispose(false, true);
+    if (typeof conceptToDelete?.dispose === "function") {
+      conceptToDelete.dispose();
+    } else {
+      const sphere = conceptToDelete?.sphere as Mesh | undefined;
+      if (sphere) {
+        sphere.dispose(false, true);
+      }
     }
+    const sphere = conceptToDelete?.sphere as Mesh | undefined;
     if (this.draggedSphere === sphere) {
       this.draggedSphere = null;
     }
     this.selectedConcept = null;
+  }
+
+  private updateConnectorPreview(start: Vector3, end: Vector3): void {
+    if (this.connectorPreview) {
+      this.connectorPreview.updatePath(start, end);
+      this.connectorPreview.connector.parent = this.worldRoot;
+      return;
+    }
+    this.connectorPreview = new Connector(this.scene, {
+      start,
+      end,
+      parent: this.worldRoot,
+      preview: true,
+    });
+  }
+
+  private createPermanentConnector(start: Vector3, end: Vector3): void {
+    const connector = new Connector(this.scene, {
+      start,
+      end,
+      parent: this.worldRoot,
+      preview: false,
+    });
+    connector.connector.metadata = { ...(connector.connector.metadata ?? {}), conceptRef: connector };
+    this.objects.push(connector);
+  }
+
+  private disposeConnectorPreview(): void {
+    if (!this.connectorPreview) {
+      return;
+    }
+    this.connectorPreview.dispose();
+    this.connectorPreview = null;
   }
 
   updateObjects(): void {
