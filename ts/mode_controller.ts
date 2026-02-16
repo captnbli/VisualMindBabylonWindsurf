@@ -289,7 +289,7 @@ class ModeController {
       const up = Vector3.Cross(right, forward).normalize();
 
       const panScale = this.camera.radius * 0.0006;
-      const panOffset = right.scale(deltaX * panScale).add(up.scale(deltaY * panScale));
+      const panOffset = right.scale(-deltaX * panScale).add(up.scale(-deltaY * panScale));
       this.worldRoot.position = this.worldRoot.position.add(panOffset);
 
       this.lastPointerX = pointer.x;
@@ -305,6 +305,7 @@ class ModeController {
         this.connectorHoverSphere = targetPick.pickedMesh as Mesh;
         endLocal = this.connectorHoverSphere.position.clone();
       } else if (this.connectorDragPlane) {
+        this.connectorHoverSphere = null;
         const ray = this.scene.createPickingRay(
           this.scene.pointerX,
           this.scene.pointerY,
@@ -364,32 +365,19 @@ class ModeController {
       }
       if (this.connectorStartSphere && targetSphere) {
         this.connectorPreview.finalize(this.connectorStartSphere, targetSphere);
-      } else {
-        this.connectorPreview.finalizeStatic();
+        this.connectorPreview.connector.parent = this.worldRoot;
+        this.connectorPreview.connector.metadata = {
+          ...(this.connectorPreview.connector.metadata ?? {}),
+          conceptRef: this.connectorPreview,
+        };
+        this.objects.push(this.connectorPreview);
+        this.connectorPreview = null;
       }
-      this.connectorPreview.connector.parent = this.worldRoot;
-      this.connectorPreview.connector.metadata = {
-        ...(this.connectorPreview.connector.metadata ?? {}),
-        conceptRef: this.connectorPreview,
-      };
-      this.objects.push(this.connectorPreview);
-      this.connectorPreview = null;
     } else if (this.activeButton === 2 && this.inputState === InputState.ConnectorLinking && this.connectorStartSphere) {
       const targetSphere = this.resolveConnectorTargetSphere(this.connectorStartSphere);
       if (targetSphere) {
         this.createPermanentConnector(this.connectorStartSphere, targetSphere);
       }
-    }
-
-    if (this.connectorPreview) {
-      this.connectorPreview.finalizeStatic();
-      this.connectorPreview.connector.parent = this.worldRoot;
-      this.connectorPreview.connector.metadata = {
-        ...(this.connectorPreview.connector.metadata ?? {}),
-        conceptRef: this.connectorPreview,
-      };
-      this.objects.push(this.connectorPreview);
-      this.connectorPreview = null;
     }
 
     this.resetPointerInteraction();
@@ -452,37 +440,6 @@ class ModeController {
       return this.connectorHoverSphere;
     }
 
-    // Fallback: nearest sphere to pointer ray, resilient to child-mesh pick issues.
-    const ray = this.scene.createPickingRay(
-      this.scene.pointerX,
-      this.scene.pointerY,
-      Matrix.Identity(),
-      this.camera
-    );
-    let best: { sphere: Mesh; dist: number } | null = null;
-    for (const object of this.objects) {
-      const sphere = object?.sphere as Mesh | undefined;
-      if (!sphere || sphere === startSphere) {
-        continue;
-      }
-      const center = sphere.getAbsolutePosition();
-      const toCenter = center.subtract(ray.origin);
-      const t = Vector3.Dot(toCenter, ray.direction);
-      if (t <= 0) {
-        continue;
-      }
-      const closest = ray.origin.add(ray.direction.scale(t));
-      const dist = Vector3.Distance(center, closest);
-      const radiusWorld = sphere.getBoundingInfo().boundingSphere.radiusWorld;
-      const threshold = radiusWorld * 1.25;
-      if (dist <= threshold && (!best || dist < best.dist)) {
-        best = { sphere, dist };
-      }
-    }
-    if (best?.sphere) {
-      return best.sphere;
-    }
-
     // Final fallback: nearest sphere to the last preview endpoint.
     const fallbackEndLocal = preferredEndLocal ?? this.connectorLastEndLocal;
     if (fallbackEndLocal) {
@@ -498,7 +455,11 @@ class ModeController {
         }
       }
       if (nearest) {
-        return nearest.sphere;
+        const radiusLocal = nearest.sphere.getBoundingInfo().boundingSphere.radius;
+        // Intentionally strict: only count as a drop when very close to the target sphere.
+        if (nearest.dist <= radiusLocal * 0.35) {
+          return nearest.sphere;
+        }
       }
     }
 
