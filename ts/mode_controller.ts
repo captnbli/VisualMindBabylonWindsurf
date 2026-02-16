@@ -364,7 +364,8 @@ class ModeController {
         );
       }
       if (this.connectorStartSphere && targetSphere) {
-        this.connectorPreview.finalize(this.connectorStartSphere, targetSphere);
+        const laneIndex = this.getNextConnectorLane(this.connectorStartSphere, targetSphere);
+        this.connectorPreview.finalizeWithLane(this.connectorStartSphere, targetSphere, laneIndex);
         this.connectorPreview.connector.parent = this.worldRoot;
         this.connectorPreview.connector.metadata = {
           ...(this.connectorPreview.connector.metadata ?? {}),
@@ -632,6 +633,7 @@ class ModeController {
   }
 
   private createPermanentConnector(startSphere: Mesh, endSphere: Mesh): void {
+    const laneIndex = this.getNextConnectorLane(startSphere, endSphere);
     const connector = new Connector(this.scene, {
       start: startSphere.position.clone(),
       end: endSphere.position.clone(),
@@ -639,9 +641,29 @@ class ModeController {
       endSphere,
       parent: this.worldRoot,
       preview: false,
+      laneIndex,
     });
     connector.connector.metadata = { ...(connector.connector.metadata ?? {}), conceptRef: connector };
     this.objects.push(connector);
+  }
+
+  private getNextConnectorLane(startSphere: Mesh, endSphere: Mesh): number {
+    const used = new Set<number>();
+    for (const object of this.objects) {
+      if (!(object instanceof Connector)) {
+        continue;
+      }
+      if (!object.connectsPair(startSphere, endSphere)) {
+        continue;
+      }
+      used.add(object.getLaneIndex());
+    }
+
+    let lane = 0;
+    while (used.has(lane)) {
+      lane += 1;
+    }
+    return lane;
   }
 
   private disposeConnectorPreview(): void {

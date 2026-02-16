@@ -12,6 +12,7 @@ interface ConnectorOptions {
   preview?: boolean;
   startSphere?: Mesh;
   endSphere?: Mesh;
+  laneIndex?: number;
 }
 
 export default class Connector {
@@ -22,6 +23,7 @@ export default class Connector {
   private startSphere: Mesh | null;
   private endSphere: Mesh | null;
   private preview: boolean;
+  private laneIndex: number;
   private disposed: boolean = false;
   private static readonly UPDATE_EPSILON_SQ = 1e-8;
 
@@ -32,6 +34,7 @@ export default class Connector {
     this.startSphere = options.startSphere ?? null;
     this.endSphere = options.endSphere ?? null;
     this.preview = options.preview ?? false;
+    this.laneIndex = options.laneIndex ?? 0;
     this.connector = this.createConnectorMesh(this.preview);
     if (options.parent) {
       this.connector.parent = options.parent;
@@ -106,8 +109,10 @@ export default class Connector {
     this.startSphere = startSphere;
     this.endSphere = endSphere;
     this.preview = false;
+    this.laneIndex = 0;
     this.start.copyFrom(startSphere.position);
     this.end.copyFrom(endSphere.position);
+    this.updatePath(startSphere.position, endSphere.position);
 
     const material = this.connector.material;
     if (material instanceof StandardMaterial) {
@@ -128,11 +133,60 @@ export default class Connector {
     }
   }
 
+  finalizeWithLane(startSphere: Mesh, endSphere: Mesh, laneIndex: number): void {
+    this.startSphere = startSphere;
+    this.endSphere = endSphere;
+    this.preview = false;
+    this.laneIndex = laneIndex;
+    this.start.copyFrom(startSphere.position);
+    this.end.copyFrom(endSphere.position);
+    this.updatePath(startSphere.position, endSphere.position);
+
+    const material = this.connector.material;
+    if (material instanceof StandardMaterial) {
+      material.emissiveColor = new Color3(1, 0.92, 0.35);
+      material.name = "connectorMat";
+    }
+  }
+
+  getLaneIndex(): number {
+    return this.laneIndex;
+  }
+
+  connectsPair(a: Mesh, b: Mesh): boolean {
+    if (!this.startSphere || !this.endSphere) {
+      return false;
+    }
+    return (
+      (this.startSphere === a && this.endSphere === b) ||
+      (this.startSphere === b && this.endSphere === a)
+    );
+  }
+
   private buildPoints(): Vector3[] {
     const points: Vector3[] = [];
     const mid = this.start.add(this.end).scale(0.5);
     const dist = Vector3.Distance(this.start, this.end);
-    const control = mid.add(Vector3.Up().scale(Math.max(0.5, dist * 0.3)));
+    const direction = this.end.subtract(this.start).normalize();
+    let side = Vector3.Cross(direction, Vector3.Up());
+    if (side.lengthSquared() < 1e-6) {
+      side = Vector3.Cross(direction, Vector3.Right());
+    }
+    if (side.lengthSquared() < 1e-6) {
+      side = Vector3.Forward();
+    } else {
+      side.normalize();
+    }
+
+    const laneStep = this.getLaneStep(this.laneIndex);
+    const baseArcHeight = Math.max(0.5, dist * 0.28);
+    // Strong lane separation in vertical space keeps multiple arcs readable
+    // from the default camera angle where lateral offsets can project to near-zero.
+    const verticalOffset = dist * 0.12 * laneStep;
+    const lateralOffset = dist * 0.05 * laneStep;
+    const control = mid
+      .add(Vector3.Up().scale(baseArcHeight + verticalOffset))
+      .add(side.scale(lateralOffset));
     const segments = 28;
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
@@ -142,6 +196,15 @@ export default class Connector {
       points.push(a.add(b).add(c));
     }
     return points;
+  }
+
+  private getLaneStep(index: number): number {
+    if (index <= 0) {
+      return 0;
+    }
+    const magnitude = Math.ceil(index / 2);
+    const sign = index % 2 === 1 ? 1 : -1;
+    return magnitude * sign;
   }
 
   private createConnectorMesh(preview: boolean): Mesh {
