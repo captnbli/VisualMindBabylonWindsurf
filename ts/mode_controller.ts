@@ -63,6 +63,8 @@ class ModeController {
   private dragOffset: Vector3 = Vector3.Zero();
   private connectorStartSphere: Mesh | null = null;
   private connectorDragPlane: Plane | null = null;
+  private connectorHoverSphere: Mesh | null = null;
+  private connectorLastEndLocal: Vector3 | null = null;
   private connectorPreview: Connector | null = null;
 
   private selectedConcept: any | null = null;
@@ -179,6 +181,8 @@ class ModeController {
     this.dragOffset = Vector3.Zero();
     this.connectorStartSphere = null;
     this.connectorDragPlane = null;
+    this.connectorHoverSphere = null;
+    this.connectorLastEndLocal = null;
 
     const canvas = this.engine.getRenderingCanvas();
     if (canvas?.setPointerCapture) {
@@ -298,7 +302,8 @@ class ModeController {
       let endLocal: Vector3 | null = null;
       const targetPick = this.pickSphereAtScenePointer();
       if (targetPick && targetPick.hit && targetPick.pickedMesh && targetPick.pickedMesh !== this.connectorStartSphere) {
-        endLocal = (targetPick.pickedMesh as Mesh).position.clone();
+        this.connectorHoverSphere = targetPick.pickedMesh as Mesh;
+        endLocal = this.connectorHoverSphere.position.clone();
       } else if (this.connectorDragPlane) {
         const ray = this.scene.createPickingRay(
           this.scene.pointerX,
@@ -314,6 +319,7 @@ class ModeController {
       }
 
       if (endLocal) {
+        this.connectorLastEndLocal = endLocal.clone();
         this.updateConnectorPreview(startLocal, endLocal);
       }
 
@@ -335,6 +341,12 @@ class ModeController {
       return;
     }
 
+    const pointer = this.getPointerPosition(event);
+    if (pointer) {
+      this.scene.pointerX = pointer.x;
+      this.scene.pointerY = pointer.y;
+    }
+
     if (this.activeButton === 0 && this.inputState === InputState.DraggingSphere) {
       this.selectedConcept = this.getConceptFromSphere(this.draggedSphere);
     }
@@ -342,12 +354,44 @@ class ModeController {
     if (this.activeButton === 0 && this.inputState === InputState.PointerArmed && !this.hasMoved) {
       this.createConceptAtPointer();
     }
-    if (this.activeButton === 2 && this.inputState === InputState.ConnectorLinking && this.connectorStartSphere) {
-      const targetPick = this.pickSphereAtScenePointer();
-      if (targetPick && targetPick.hit && targetPick.pickedMesh && targetPick.pickedMesh !== this.connectorStartSphere) {
-        this.createPermanentConnector(this.connectorStartSphere.position.clone(), (targetPick.pickedMesh as Mesh).position.clone());
+    if (this.activeButton === 2 && this.connectorPreview) {
+      let targetSphere: Mesh | null = null;
+      if (this.connectorStartSphere) {
+        targetSphere = this.resolveConnectorTargetSphere(
+          this.connectorStartSphere,
+          this.connectorPreview.end ?? null
+        );
+      }
+      if (this.connectorStartSphere && targetSphere) {
+        this.connectorPreview.finalize(this.connectorStartSphere, targetSphere);
+      } else {
+        this.connectorPreview.finalizeStatic();
+      }
+      this.connectorPreview.connector.parent = this.worldRoot;
+      this.connectorPreview.connector.metadata = {
+        ...(this.connectorPreview.connector.metadata ?? {}),
+        conceptRef: this.connectorPreview,
+      };
+      this.objects.push(this.connectorPreview);
+      this.connectorPreview = null;
+    } else if (this.activeButton === 2 && this.inputState === InputState.ConnectorLinking && this.connectorStartSphere) {
+      const targetSphere = this.resolveConnectorTargetSphere(this.connectorStartSphere);
+      if (targetSphere) {
+        this.createPermanentConnector(this.connectorStartSphere, targetSphere);
       }
     }
+
+    if (this.connectorPreview) {
+      this.connectorPreview.finalizeStatic();
+      this.connectorPreview.connector.parent = this.worldRoot;
+      this.connectorPreview.connector.metadata = {
+        ...(this.connectorPreview.connector.metadata ?? {}),
+        conceptRef: this.connectorPreview,
+      };
+      this.objects.push(this.connectorPreview);
+      this.connectorPreview = null;
+    }
+
     this.resetPointerInteraction();
   }
 
@@ -385,9 +429,91 @@ class ModeController {
   }
 
   private pickSphereAtScenePointer() {
-    return this.scene.pick(this.scene.pointerX, this.scene.pointerY, (mesh) => {
-      return !!mesh && mesh.name.startsWith("sphere");
-    });
+    const pick = this.scene.pick(this.scene.pointerX, this.scene.pointerY);
+    if (!pick || !pick.hit || !pick.pickedMesh) {
+      return null;
+    }
+    const sphere = this.findSphereAncestor(pick.pickedMesh);
+    if (!sphere) {
+      return null;
+    }
+    return {
+      ...pick,
+      pickedMesh: sphere,
+    };
+  }
+
+  private resolveConnectorTargetSphere(startSphere: Mesh, preferredEndLocal: Vector3 | null = null): Mesh | null {
+    const targetPick = this.pickSphereAtScenePointer();
+    if (targetPick && targetPick.hit && targetPick.pickedMesh && targetPick.pickedMesh !== startSphere) {
+      return targetPick.pickedMesh as Mesh;
+    }
+    if (this.connectorHoverSphere && this.connectorHoverSphere !== startSphere) {
+      return this.connectorHoverSphere;
+    }
+
+    // Fallback: nearest sphere to pointer ray, resilient to child-mesh pick issues.
+    const ray = this.scene.createPickingRay(
+      this.scene.pointerX,
+      this.scene.pointerY,
+      Matrix.Identity(),
+      this.camera
+    );
+    let best: { sphere: Mesh; dist: number } | null = null;
+    for (const object of this.objects) {
+      const sphere = object?.sphere as Mesh | undefined;
+      if (!sphere || sphere === startSphere) {
+        continue;
+      }
+      const center = sphere.getAbsolutePosition();
+      const toCenter = center.subtract(ray.origin);
+      const t = Vector3.Dot(toCenter, ray.direction);
+      if (t <= 0) {
+        continue;
+      }
+      const closest = ray.origin.add(ray.direction.scale(t));
+      const dist = Vector3.Distance(center, closest);
+      const radiusWorld = sphere.getBoundingInfo().boundingSphere.radiusWorld;
+      const threshold = radiusWorld * 1.25;
+      if (dist <= threshold && (!best || dist < best.dist)) {
+        best = { sphere, dist };
+      }
+    }
+    if (best?.sphere) {
+      return best.sphere;
+    }
+
+    // Final fallback: nearest sphere to the last preview endpoint.
+    const fallbackEndLocal = preferredEndLocal ?? this.connectorLastEndLocal;
+    if (fallbackEndLocal) {
+      let nearest: { sphere: Mesh; dist: number } | null = null;
+      for (const object of this.objects) {
+        const sphere = object?.sphere as Mesh | undefined;
+        if (!sphere || sphere === startSphere) {
+          continue;
+        }
+        const dist = Vector3.Distance(sphere.position, fallbackEndLocal);
+        if (!nearest || dist < nearest.dist) {
+          nearest = { sphere, dist };
+        }
+      }
+      if (nearest) {
+        return nearest.sphere;
+      }
+    }
+
+    return null;
+  }
+
+  private findSphereAncestor(mesh: any): Mesh | null {
+    let current = mesh;
+    while (current) {
+      if (typeof current.name === "string" && current.name.startsWith("sphere")) {
+        return current as Mesh;
+      }
+      current = current.parent;
+    }
+    return null;
   }
 
   private resetPointerInteraction(): void {
@@ -409,6 +535,8 @@ class ModeController {
     this.dragOffset = Vector3.Zero();
     this.connectorStartSphere = null;
     this.connectorDragPlane = null;
+    this.connectorHoverSphere = null;
+    this.connectorLastEndLocal = null;
     this.disposeConnectorPreview();
   }
 
@@ -542,10 +670,12 @@ class ModeController {
     });
   }
 
-  private createPermanentConnector(start: Vector3, end: Vector3): void {
+  private createPermanentConnector(startSphere: Mesh, endSphere: Mesh): void {
     const connector = new Connector(this.scene, {
-      start,
-      end,
+      start: startSphere.position.clone(),
+      end: endSphere.position.clone(),
+      startSphere,
+      endSphere,
       parent: this.worldRoot,
       preview: false,
     });
@@ -562,11 +692,17 @@ class ModeController {
   }
 
   updateObjects(): void {
-    this.objects.forEach((object) => {
+    const alive: any[] = [];
+    for (const object of this.objects) {
       if (typeof object.update === "function") {
         object.update();
       }
-    });
+      if (typeof object.isDisposed === "function" && object.isDisposed()) {
+        continue;
+      }
+      alive.push(object);
+    }
+    this.objects = alive;
   }
 }
 

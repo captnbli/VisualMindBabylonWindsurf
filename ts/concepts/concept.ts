@@ -6,6 +6,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { PBRMetallicRoughnessMaterial } from "@babylonjs/core/Materials/PBR/pbrMetallicRoughnessMaterial";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { AdvancedDynamicTexture } from "@babylonjs/gui/2D/advancedDynamicTexture";
 import { TextBlock } from "@babylonjs/gui/2D/controls";
 import { Control } from "@babylonjs/gui/2D/controls/control";
@@ -101,7 +102,7 @@ class Concept {
       false
     );
     bandMat.diffuseTexture = this.labelBandTexture;
-    if (bandMat.diffuseTexture) {
+    if (bandMat.diffuseTexture instanceof Texture) {
       bandMat.diffuseTexture.uScale = -1;
       bandMat.diffuseTexture.uOffset = 1;
     }
