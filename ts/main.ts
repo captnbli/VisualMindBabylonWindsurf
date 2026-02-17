@@ -7,7 +7,7 @@ import { DirectionalLight, HemisphericLight } from "@babylonjs/core/Lights";
 import ModeController from './mode_controller';
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 
-const APP_VERSION = 4;
+const APP_VERSION = 9;
 document.title = `VisualMind Test v${APP_VERSION}`;
 
 function addAppVersionBadge(): void {

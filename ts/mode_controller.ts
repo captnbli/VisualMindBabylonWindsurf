@@ -511,13 +511,13 @@ class ModeController {
   }
 
   private rotateModel(deltaX: number, deltaY: number): void {
-    const baseRotationSpeed = 0.008;
+    const baseRotationSpeed = 0.0025;
     const rotationSpeed = baseRotationSpeed;
     const yawMagnitude = Math.abs(deltaX) * rotationSpeed;
     const pitchMagnitude = Math.abs(deltaY) * rotationSpeed;
-    const minStep = 0.008;
+    const minStep = 0.0025;
     const yaw = deltaX === 0 ? 0 : -Math.sign(deltaX) * Math.max(yawMagnitude, minStep);
-    const pitch = deltaY === 0 ? 0 : -Math.sign(deltaY) * Math.max(pitchMagnitude, minStep);
+    const pitch = deltaY === 0 ? 0 : Math.sign(deltaY) * Math.max(pitchMagnitude, minStep);
 
     const viewDir = this.camera.getTarget().subtract(this.camera.position).normalize();
     let cameraRight = Vector3.Cross(viewDir, Vector3.Up());
@@ -535,9 +535,10 @@ class ModeController {
   }
 
   // Home plane goes through origin and is parallel to the initial camera view.
-  // Zoom shifts placement to parallel planes along the home-plane normal.
+  // Apply full zoom compensation so newly created spheres keep approximately
+  // the same apparent size as at the initial zoom level.
   private getPlacementPlane(): { origin: Vector3; normal: Vector3 } {
-    const zoomDelta = (this.camera.radius - this.homeCameraRadius) * 0.5;
+    const zoomDelta = this.camera.radius - this.homeCameraRadius;
     const planeOrigin = this.homePlaneOrigin.add(this.homePlaneNormal.scale(zoomDelta));
     return {
       origin: planeOrigin,
