@@ -6,6 +6,38 @@ import { Camera, ArcRotateCamera } from "@babylonjs/core/Cameras";
 import { DirectionalLight, HemisphericLight } from "@babylonjs/core/Lights";
 import ModeController from './mode_controller';
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+
+const APP_VERSION = 4;
+document.title = `VisualMind Test v${APP_VERSION}`;
+
+function addAppVersionBadge(): void {
+  const existing = document.getElementById("app-version-badge");
+  const badge = existing ?? document.createElement("div");
+  badge.id = "app-version-badge";
+  badge.textContent = `v${APP_VERSION}`;
+  if (!existing) {
+    badge.style.position = "fixed";
+    badge.style.right = "10px";
+    badge.style.bottom = "10px";
+    badge.style.padding = "3px 8px";
+    badge.style.border = "1px solid rgba(255,255,255,0.4)";
+    badge.style.borderRadius = "999px";
+    badge.style.background = "rgba(0,0,0,0.45)";
+    badge.style.color = "#fff";
+    badge.style.font = "12px/1.2 monospace";
+    badge.style.pointerEvents = "none";
+    badge.style.zIndex = "9999";
+    document.body.appendChild(badge);
+  }
+}
+
+const hmr = (import.meta as any).hot;
+if (hmr) {
+  hmr.accept(() => {
+    window.location.reload();
+  });
+}
+
 export function createScene(canvas: HTMLCanvasElement): Scene {
   const engine = new Engine(canvas, true);
   const scene = new Scene(engine);
@@ -69,6 +101,7 @@ export function createScene(canvas: HTMLCanvasElement): Scene {
 
 
 const canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
+addAppVersionBadge();
 // Disable right-click context menu
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 const scene = createScene(canvas);

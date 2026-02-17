@@ -56,6 +56,8 @@ class ModeController {
   private activeButton: number | null = null;
   private lastPointerX: number = 0;
   private lastPointerY: number = 0;
+  private pointerStartX: number = 0;
+  private pointerStartY: number = 0;
   private hasMoved: boolean = false;
 
   private draggedSphere: Mesh | null = null;
@@ -172,6 +174,8 @@ class ModeController {
     this.scene.pointerY = pointer.y;
     this.lastPointerX = pointer.x;
     this.lastPointerY = pointer.y;
+    this.pointerStartX = pointer.x;
+    this.pointerStartY = pointer.y;
 
     this.activePointerId = event.pointerId;
     this.activeButton = event.button;
@@ -252,7 +256,9 @@ class ModeController {
     const deltaX = pointer.x - this.lastPointerX;
     const deltaY = pointer.y - this.lastPointerY;
 
-    if (Math.abs(deltaX) > DRAG_THRESHOLD_PX || Math.abs(deltaY) > DRAG_THRESHOLD_PX) {
+    const totalDeltaX = pointer.x - this.pointerStartX;
+    const totalDeltaY = pointer.y - this.pointerStartY;
+    if (Math.abs(totalDeltaX) > DRAG_THRESHOLD_PX || Math.abs(totalDeltaY) > DRAG_THRESHOLD_PX) {
       this.hasMoved = true;
       if (this.inputState === InputState.PointerArmed) {
         this.inputState = InputState.Rotating;
@@ -492,6 +498,8 @@ class ModeController {
     this.activePointerId = null;
     this.activeButton = null;
     this.hasMoved = false;
+    this.pointerStartX = 0;
+    this.pointerStartY = 0;
     this.draggedSphere = null;
     this.dragPlane = null;
     this.dragOffset = Vector3.Zero();
@@ -503,10 +511,13 @@ class ModeController {
   }
 
   private rotateModel(deltaX: number, deltaY: number): void {
-    const baseRotationSpeed = 0.00045;
-    const rotationSpeed = baseRotationSpeed * (100 / Math.max(this.camera.radius, 20));
-    const yaw = -deltaX * rotationSpeed;
-    const pitch = -deltaY * rotationSpeed;
+    const baseRotationSpeed = 0.008;
+    const rotationSpeed = baseRotationSpeed;
+    const yawMagnitude = Math.abs(deltaX) * rotationSpeed;
+    const pitchMagnitude = Math.abs(deltaY) * rotationSpeed;
+    const minStep = 0.008;
+    const yaw = deltaX === 0 ? 0 : -Math.sign(deltaX) * Math.max(yawMagnitude, minStep);
+    const pitch = deltaY === 0 ? 0 : -Math.sign(deltaY) * Math.max(pitchMagnitude, minStep);
 
     const viewDir = this.camera.getTarget().subtract(this.camera.position).normalize();
     let cameraRight = Vector3.Cross(viewDir, Vector3.Up());

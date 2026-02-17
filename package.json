@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A Babylon.js 3D visualization app for concept spheres.",
   "scripts": {
-    "start": "parcel index.html",
+    "start": "parcel index.html --port 1234 --no-cache",
     "build": "parcel build index.html"
   },
   "dependencies": {
