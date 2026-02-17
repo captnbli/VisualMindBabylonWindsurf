@@ -61,6 +61,7 @@ class Concept {
       mat.environmentTexture = this.scene.environmentTexture;
     }
     this.sphere.material = mat;
+    this.sphere.renderingGroupId = 1;
     this.sphere.position = this.position;
     console.log("[CONCEPT] Created metallic sphere at", this.position.toString());
     this.ensureLabelBand();
@@ -86,6 +87,7 @@ class Concept {
     );
     this.labelBand.parent = this.sphere;
     this.labelBand.position.set(0, 0, 0);
+    this.labelBand.renderingGroupId = 1;
 
     const bandMat = new StandardMaterial("labelBandMat", this.scene);
     bandMat.disableLighting = true;

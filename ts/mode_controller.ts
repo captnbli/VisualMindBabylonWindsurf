@@ -327,7 +327,7 @@ class ModeController {
 
       if (endLocal) {
         this.connectorLastEndLocal = endLocal.clone();
-        this.updateConnectorPreview(startLocal, endLocal);
+        this.updateConnectorPreview(startLocal, endLocal, this.connectorStartSphere);
       }
 
       this.lastPointerX = pointer.x;
@@ -632,8 +632,9 @@ class ModeController {
     this.selectedConcept = null;
   }
 
-  private updateConnectorPreview(start: Vector3, end: Vector3): void {
+  private updateConnectorPreview(start: Vector3, end: Vector3, startSphere: Mesh): void {
     if (this.connectorPreview) {
+      this.connectorPreview.setSourceSphere(startSphere);
       this.connectorPreview.updatePath(start, end);
       this.connectorPreview.connector.parent = this.worldRoot;
       return;
@@ -641,6 +642,7 @@ class ModeController {
     this.connectorPreview = new Connector(this.scene, {
       start,
       end,
+      startSphere,
       parent: this.worldRoot,
       preview: true,
     });
