@@ -394,9 +394,11 @@ class ModeController {
     event.preventDefault();
     event.stopPropagation();
 
-    const zoomFactor = 1.1;
-    const delta = event.deltaY > 0 ? zoomFactor : 1 / zoomFactor;
-    this.camera.radius *= delta;
+    // Small, controlled zoom steps for layer separation instead of large travel.
+    // Positive deltaY zooms out, negative zooms in.
+    const rawZoomStep = Math.exp(event.deltaY * 0.0003);
+    const zoomStep = Math.min(Math.max(rawZoomStep, 0.97), 1.03);
+    this.camera.radius *= zoomStep;
 
     if (this.camera.lowerRadiusLimit !== null) {
       this.camera.radius = Math.max(this.camera.radius, this.camera.lowerRadiusLimit);
