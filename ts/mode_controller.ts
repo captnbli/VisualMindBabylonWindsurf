@@ -212,8 +212,9 @@ class ModeController {
       // Mouse-down on sphere enters move mode; entry mode starts on release.
       this.selectedConcept = null;
 
+      const draggedSphereWorldPos = this.draggedSphere.getAbsolutePosition();
       const dragPlaneNormal = this.camera.getTarget().subtract(this.camera.position).normalize();
-      const dragPlaneOrigin = spherePick.pickedPoint ?? this.draggedSphere.position.clone();
+      const dragPlaneOrigin = spherePick.pickedPoint ?? draggedSphereWorldPos;
       this.dragPlane = Plane.FromPositionAndNormal(dragPlaneOrigin, dragPlaneNormal);
 
       const ray = this.scene.createPickingRay(
@@ -225,7 +226,7 @@ class ModeController {
       const hitDistance = ray.intersectsPlane(this.dragPlane);
       if (hitDistance != null) {
         const hitPoint = ray.origin.add(ray.direction.scale(hitDistance));
-        this.dragOffset = this.draggedSphere.position.subtract(hitPoint);
+        this.dragOffset = draggedSphereWorldPos.subtract(hitPoint);
       }
 
       this.inputState = InputState.DraggingSphere;
