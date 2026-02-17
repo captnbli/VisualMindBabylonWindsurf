@@ -1,6 +1,6 @@
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
-import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
+import { Color3, Vector3, Quaternion } from "@babylonjs/core/Maths/math";
 import { Camera } from "@babylonjs/core/Cameras/camera";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
@@ -35,6 +35,8 @@ class Concept {
   private labelBand: Mesh | null = null;
   private labelBandTexture: AdvancedDynamicTexture | null = null;
   private labelTextBlocks: TextBlock[] = [];
+  private spinAngle: number = 0;
+  private static readonly SPIN_SPEED = 0.003;
 
   constructor(scene: Scene, options: ConceptOptions = {}) {
     this.scene = scene;
@@ -142,8 +144,41 @@ class Concept {
   }
 
   public update(): void {
-    // Gentle spin to communicate object liveliness while preserving attached labels.
-    this.sphere.rotation.y += 0.003;
+    // Keep initial-style equator spin in world space even after world-root rotations.
+    this.spinAngle += Concept.SPIN_SPEED;
+    this.applyWorldUprightSpin();
+  }
+
+  public restoreInitialOrientationStyle(): void {
+    this.sphere.computeWorldMatrix(true);
+    const worldForward = this.sphere.getDirection(Vector3.Forward());
+    worldForward.y = 0;
+    if (worldForward.lengthSquared() < 1e-8) {
+      worldForward.copyFromFloats(0, 0, 1);
+    } else {
+      worldForward.normalize();
+    }
+
+    // Keep only world yaw so label text remains upright like the initial state.
+    const yaw = Math.atan2(worldForward.x, worldForward.z);
+    this.spinAngle = yaw;
+    this.applyWorldUprightSpin();
+  }
+
+  private applyWorldUprightSpin(): void {
+    const desiredWorld = Quaternion.FromEulerAngles(0, this.spinAngle, 0);
+    let local = desiredWorld;
+    const parent: any = this.sphere.parent;
+    if (parent && typeof parent.getWorldMatrix === "function") {
+      const parentScale = Vector3.Zero();
+      const parentRotation = Quaternion.Identity();
+      const parentPos = Vector3.Zero();
+      parent.getWorldMatrix().decompose(parentScale, parentRotation, parentPos);
+      const invParent = parentRotation.clone();
+      invParent.invertInPlace();
+      local = invParent.multiply(desiredWorld);
+    }
+    this.sphere.rotationQuaternion = local.normalize();
   }
 
   public setOverlayText(newText: string): void {

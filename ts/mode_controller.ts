@@ -388,6 +388,10 @@ class ModeController {
       }
     }
 
+    if (this.inputState === InputState.Rotating) {
+      this.restoreAllSphereOrientationStyles();
+    }
+
     this.resetPointerInteraction();
   }
 
@@ -689,6 +693,14 @@ class ModeController {
     }
     this.connectorPreview.dispose();
     this.connectorPreview = null;
+  }
+
+  private restoreAllSphereOrientationStyles(): void {
+    for (const object of this.objects) {
+      if (typeof object?.restoreInitialOrientationStyle === "function") {
+        object.restoreInitialOrientationStyle();
+      }
+    }
   }
 
   updateObjects(): void {
