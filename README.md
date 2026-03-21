@@ -2,6 +2,12 @@
 
 A 3D spatial mind-mapping tool built on [Babylon.js](https://babylonjs.com). Place and connect typed concept nodes — Questions, Answers, Notes, and more — in a navigable 3D scene.
 
+## Try it now
+
+**[helpful-zuccutto-9f1a65.netlify.app](https://helpful-zuccutto-9f1a65.netlify.app)**
+
+No install required — runs in the browser.
+
 ## What it does
 
 - Place **7 node types** (Answer, Question, Note, Plus, Minus, Link, Reference) in 3D space
@@ -9,11 +15,17 @@ A 3D spatial mind-mapping tool built on [Babylon.js](https://babylonjs.com). Pla
 - Rotate and pan the scene with mouse or touch
 - Auto-saves graphs to local storage
 
-## Getting started
+## Run it locally
 
 ```bash
+git clone https://github.com/captnbli/VisualMindBabylonWindsurf.git
+cd VisualMindBabylonWindsurf
 npm install
 npm start        # dev server at localhost:1234
+```
+
+Other commands:
+```bash
 npm run build    # production build
 npm test         # run tests
 ```
