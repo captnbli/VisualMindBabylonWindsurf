@@ -371,20 +371,23 @@ class ModeController {
         );
       }
       if (this.connectorStartSphere && targetSphere) {
+        const finalizedConnector = this.connectorPreview;
         const laneIndex = this.getNextConnectorLane(this.connectorStartSphere, targetSphere);
-        this.connectorPreview.finalizeWithLane(this.connectorStartSphere, targetSphere, laneIndex);
-        this.connectorPreview.connector.parent = this.worldRoot;
-        this.connectorPreview.connector.metadata = {
-          ...(this.connectorPreview.connector.metadata ?? {}),
-          conceptRef: this.connectorPreview,
+        finalizedConnector.finalizeWithLane(this.connectorStartSphere, targetSphere, laneIndex);
+        finalizedConnector.connector.parent = this.worldRoot;
+        finalizedConnector.connector.metadata = {
+          ...(finalizedConnector.connector.metadata ?? {}),
+          conceptRef: finalizedConnector,
         };
-        this.objects.push(this.connectorPreview);
+        this.objects.push(finalizedConnector);
+        this.selectedConcept = finalizedConnector;
         this.connectorPreview = null;
       }
     } else if (this.activeButton === 2 && this.inputState === InputState.ConnectorLinking && this.connectorStartSphere) {
       const targetSphere = this.resolveConnectorTargetSphere(this.connectorStartSphere);
       if (targetSphere) {
-        this.createPermanentConnector(this.connectorStartSphere, targetSphere);
+        const createdConnector = this.createPermanentConnector(this.connectorStartSphere, targetSphere);
+        this.selectedConcept = createdConnector;
       }
     }
 
@@ -653,7 +656,7 @@ class ModeController {
     });
   }
 
-  private createPermanentConnector(startSphere: Mesh, endSphere: Mesh): void {
+  private createPermanentConnector(startSphere: Mesh, endSphere: Mesh): Connector {
     const laneIndex = this.getNextConnectorLane(startSphere, endSphere);
     const connector = new Connector(this.scene, {
       start: startSphere.position.clone(),
@@ -666,6 +669,7 @@ class ModeController {
     });
     connector.connector.metadata = { ...(connector.connector.metadata ?? {}), conceptRef: connector };
     this.objects.push(connector);
+    return connector;
   }
 
   private getNextConnectorLane(startSphere: Mesh, endSphere: Mesh): number {

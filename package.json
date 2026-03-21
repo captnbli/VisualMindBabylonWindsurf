@@ -4,14 +4,18 @@
   "description": "A Babylon.js 3D visualization app for concept spheres.",
   "scripts": {
     "start": "parcel index.html --port 1234 --no-cache",
-    "build": "parcel build index.html"
+    "build": "parcel build index.html",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@babylonjs/core": "^7.0.0",
-    "@babylonjs/gui": "^7.0.0"
+    "@babylonjs/gui": "^7.0.0",
+    "eventemitter3": "^5.0.4"
   },
   "devDependencies": {
     "parcel": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "^4.1.0"
   }
 }

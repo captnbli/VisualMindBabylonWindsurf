@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
-    "rootDir": "ts",
-    "target": "ES6",
+"target": "ES6",
     "module": "ESNext",
     "moduleResolution": "Node",
     "strict": true,

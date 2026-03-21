@@ -6,7 +6,6 @@ export default class Plus extends Concept {
   constructor(scene: Scene, options: ConceptOptions = {}) {
     options.color = new Color3(0, 0.5, 0); // Green, normalised
     options.textColor = "#ffffff";
-    options.label = '';
     super(scene, options);
   }
 }

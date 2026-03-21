@@ -6,7 +6,6 @@ export default class Link extends Concept {
   constructor(scene: Scene, options: ConceptOptions = {}) {
     options.color = new Color3(0.5, 0.5, 0.5); // Grey
     options.textColor = "#111111";
-    options.label = '';
     super(scene, options);
   }
 }

@@ -10,6 +10,13 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { AdvancedDynamicTexture } from "@babylonjs/gui/2D/advancedDynamicTexture";
 import { TextBlock } from "@babylonjs/gui/2D/controls";
 import { Control } from "@babylonjs/gui/2D/controls/control";
+import { Mode } from './types';
+
+// weight → sphere scale multiplier
+// weight 2 = scale 1.0 (preserves original sphere size)
+export function weightToScale(weight: 1 | 2 | 3 | 4 | 5): number {
+  return 0.6 + weight * 0.2;
+}
 
 interface ConceptOptions {
   color?: Color3;
@@ -19,6 +26,11 @@ interface ConceptOptions {
   position?: Vector3;
   camera?: Camera;
   engine?: Engine;
+  // Rich node fields
+  id?: string;
+  notes?: string;
+  weight?: 1 | 2 | 3 | 4 | 5;
+  nodeType?: Mode;
 }
 
 class Concept {
@@ -32,6 +44,11 @@ class Concept {
   position: Vector3;
   labelCount: number = 2;
   sphere: Mesh;
+  // Rich node fields
+  id: string;
+  notes: string;
+  weight: 1 | 2 | 3 | 4 | 5;
+  nodeType: Mode | null;
   private labelBand: Mesh | null = null;
   private labelBandTexture: AdvancedDynamicTexture | null = null;
   private labelTextBlocks: TextBlock[] = [];
@@ -47,6 +64,10 @@ class Concept {
     this.position = options.position ?? new Vector3(0, 0, 0);
     this.camera = options.camera;
     this.engine = options.engine;
+    this.id = options.id ?? crypto.randomUUID();
+    this.notes = options.notes ?? '';
+    this.weight = options.weight ?? 3;
+    this.nodeType = options.nodeType ?? null;
 
     // Create sphere using per-type color and radius
     this.sphere = MeshBuilder.CreateSphere("sphere", {
@@ -65,7 +86,8 @@ class Concept {
     this.sphere.material = mat;
     this.sphere.renderingGroupId = 1;
     this.sphere.position = this.position;
-    console.log("[CONCEPT] Created metallic sphere at", this.position.toString());
+    // Apply weight-based scale (weight 2 = scale 1.0 = original size)
+    this.sphere.scaling.setAll(weightToScale(this.weight));
     this.ensureLabelBand();
     this.updateLabelBandText();
     this.sphere.refreshBoundingInfo(true);
@@ -179,6 +201,15 @@ class Concept {
       local = invParent.multiply(desiredWorld);
     }
     this.sphere.rotationQuaternion = local.normalize();
+  }
+
+  public updateWeight(w: 1 | 2 | 3 | 4 | 5): void {
+    this.weight = w;
+    this.sphere.scaling.setAll(weightToScale(w));
+  }
+
+  public updateNotes(notes: string): void {
+    this.notes = notes;
   }
 
   public setOverlayText(newText: string): void {

@@ -2,8 +2,11 @@ import { Scene } from "@babylonjs/core/scene";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { Color3, Vector3 } from "@babylonjs/core/Maths/math";
+import { Color3, Matrix, Quaternion, Vector3 } from "@babylonjs/core/Maths/math";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import { AdvancedDynamicTexture } from "@babylonjs/gui/2D/advancedDynamicTexture";
+import { TextBlock } from "@babylonjs/gui/2D/controls";
+import { Control } from "@babylonjs/gui/2D/controls/control";
 
 interface ConnectorOptions {
   start: Vector3;
@@ -13,6 +16,9 @@ interface ConnectorOptions {
   startSphere?: Mesh;
   endSphere?: Mesh;
   laneIndex?: number;
+  id?: string;
+  explicitColor?: Color3;   // bypasses resolveConnectorColor when provided
+  alpha?: number;            // initial opacity (0–1); default 1.0
 }
 
 export default class Connector {
@@ -20,6 +26,7 @@ export default class Connector {
   start: Vector3;
   end: Vector3;
   connector: Mesh;
+  id: string;
   private arrowHeadA: Mesh | null = null;
   private arrowHeadB: Mesh | null = null;
   private startSphere: Mesh | null;
@@ -27,6 +34,10 @@ export default class Connector {
   private preview: boolean;
   private laneIndex: number;
   private connectorColor: Color3;
+  private overlayText: string = "";
+  private labelPlane: Mesh | null = null;
+  private labelTexture: AdvancedDynamicTexture | null = null;
+  private labelTextBlock: TextBlock | null = null;
   private disposed: boolean = false;
   private static readonly UPDATE_EPSILON_SQ = 1e-8;
 
@@ -38,10 +49,16 @@ export default class Connector {
     this.endSphere = options.endSphere ?? null;
     this.preview = options.preview ?? false;
     this.laneIndex = options.laneIndex ?? 0;
-    this.connectorColor = this.resolveConnectorColor();
+    this.id = options.id ?? crypto.randomUUID();
+    this.connectorColor = options.explicitColor
+      ? options.explicitColor.clone()
+      : this.resolveConnectorColor();
     this.connector = this.createConnectorMesh(this.preview);
     if (options.parent) {
       this.connector.parent = options.parent;
+    }
+    if (options.alpha !== undefined) {
+      this.setAlpha(options.alpha);
     }
     this.updateArrowHead();
   }
@@ -74,12 +91,14 @@ export default class Connector {
     }
     this.connector.refreshBoundingInfo(true);
     this.updateArrowHead();
+    this.updateLabelPlacement();
   }
 
   dispose(): void {
     if (this.disposed) {
       return;
     }
+    this.disposeLabel();
     this.disposeArrowHeads();
     this.connector.dispose(false, true);
     this.disposed = true;
@@ -92,6 +111,9 @@ export default class Connector {
   update(): void {
     if (this.disposed) {
       return;
+    }
+    if (!this.preview && this.labelPlane) {
+      this.updateLabelPlacement();
     }
     if (!this.startSphere || !this.endSphere) {
       return;
@@ -122,6 +144,8 @@ export default class Connector {
     this.end.copyFrom(endSphere.position);
     this.updatePath(startSphere.position, endSphere.position);
     this.applyConnectorColor();
+    this.ensureLabel();
+    this.updateLabelPlacement();
   }
 
   finalizeStatic(): void {
@@ -131,6 +155,8 @@ export default class Connector {
     this.connectorColor = this.resolveConnectorColor();
     this.applyConnectorColor();
     this.updateArrowHead();
+    this.ensureLabel();
+    this.updateLabelPlacement();
   }
 
   finalizeWithLane(startSphere: Mesh, endSphere: Mesh, laneIndex: number): void {
@@ -143,6 +169,8 @@ export default class Connector {
     this.end.copyFrom(endSphere.position);
     this.updatePath(startSphere.position, endSphere.position);
     this.applyConnectorColor();
+    this.ensureLabel();
+    this.updateLabelPlacement();
   }
 
   setSourceSphere(sourceSphere: Mesh): void {
@@ -160,6 +188,33 @@ export default class Connector {
 
   getLaneIndex(): number {
     return this.laneIndex;
+  }
+
+  setOverlayText(newText: string): void {
+    this.overlayText = newText.slice(0, 24);
+    this.ensureLabel();
+    if (this.labelTextBlock) {
+      this.labelTextBlock.text = this.overlayText;
+    }
+  }
+
+  getOverlayText(): string {
+    return this.overlayText;
+  }
+
+  setAlpha(alpha: number): void {
+    this.connector.alpha = alpha;
+    if (this.arrowHeadA) this.arrowHeadA.alpha = alpha;
+    if (this.arrowHeadB) this.arrowHeadB.alpha = alpha;
+    if (this.labelPlane) this.labelPlane.alpha = alpha * 0.55;
+  }
+
+  setLaneIndex(index: number): void {
+    if (this.laneIndex === index) return;
+    this.laneIndex = index;
+    if (!this.preview && this.startSphere && this.endSphere) {
+      this.updatePath(this.startSphere.position, this.endSphere.position);
+    }
   }
 
   connectsPair(a: Mesh, b: Mesh): boolean {
@@ -235,6 +290,51 @@ export default class Connector {
     return mesh;
   }
 
+  private ensureLabel(): void {
+    if (this.preview) {
+      this.disposeLabel();
+      return;
+    }
+    if (this.labelPlane && this.labelTexture && this.labelTextBlock) {
+      return;
+    }
+
+    const plane = MeshBuilder.CreatePlane("connectorLabel", { width: 2.4, height: 0.72 }, this.scene);
+    // Keep label as part of arc transform, not screen-facing billboard behavior.
+    plane.billboardMode = Mesh.BILLBOARDMODE_NONE;
+    plane.isPickable = false;
+    plane.renderingGroupId = 1;
+
+    const mat = new StandardMaterial("connectorLabelMat", this.scene);
+    mat.disableLighting = true;
+    mat.emissiveColor = Color3.Black();
+    mat.specularColor = Color3.Black();
+    mat.backFaceCulling = false;
+    mat.alpha = 0.55;
+    mat.zOffset = -2;
+    plane.material = mat;
+
+    const texture = AdvancedDynamicTexture.CreateForMesh(plane, 1024, 256, false);
+    const text = new TextBlock("connectorLabelText");
+    text.width = "96%";
+    text.height = "90%";
+    text.color = "#ffffff";
+    text.fontSize = 150;
+    text.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+    text.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
+    text.text = this.overlayText;
+    texture.addControl(text);
+
+    const parent = this.connector.parent;
+    if (parent) {
+      plane.parent = parent;
+    }
+
+    this.labelPlane = plane;
+    this.labelTexture = texture;
+    this.labelTextBlock = text;
+  }
+
   private updateArrowHead(): void {
     if (this.preview) {
       this.disposeArrowHeads();
@@ -286,9 +386,9 @@ export default class Connector {
       side.normalize();
     }
 
-    const arrowLength = Math.max(0.16, dist * 0.06);
-    const arrowWidth = Math.max(0.14, dist * 0.045);
-    const arrowRadius = Math.max(0.012, dist * 0.0035);
+    const arrowLength = Math.max(0.07, dist * 0.028);
+    const arrowWidth = Math.max(0.055, dist * 0.018);
+    const arrowRadius = Math.max(0.0055, dist * 0.0016);
     // Slightly overlap the head into the arc so no visual seam appears.
     const tipOverlap = Math.max(0.02, dist * 0.006);
     const tip = renderEnd.add(backDir.scale(tipOverlap));
@@ -373,6 +473,18 @@ export default class Connector {
     }
   }
 
+  private disposeLabel(): void {
+    if (this.labelTexture) {
+      this.labelTexture.dispose();
+      this.labelTexture = null;
+    }
+    if (this.labelPlane) {
+      this.labelPlane.dispose(false, true);
+      this.labelPlane = null;
+    }
+    this.labelTextBlock = null;
+  }
+
   private getRenderEndpoints(): { renderStart: Vector3; renderEnd: Vector3 } {
     const start = this.start.clone();
     const end = this.end.clone();
@@ -401,5 +513,94 @@ export default class Connector {
   private getSphereVisualRadius(sphere: Mesh): number {
     const extents = sphere.getBoundingInfo().boundingBox.extendSize;
     return Math.max(extents.x, extents.y, extents.z);
+  }
+
+  private updateLabelPlacement(): void {
+    if (this.preview || !this.labelPlane) {
+      return;
+    }
+
+    const path = this.buildPoints();
+    if (path.length < 3) {
+      this.labelPlane.position.copyFrom(this.end);
+      return;
+    }
+
+    const startCenter = this.startSphere?.position ?? this.start;
+    const endCenter = this.endSphere?.position ?? this.end;
+
+    let bestIdx = Math.floor(path.length * 0.5);
+    let bestClearance = -Infinity;
+    for (let i = 2; i < path.length - 2; i++) {
+      const p = path[i];
+      const clearance = Math.min(Vector3.DistanceSquared(p, startCenter), Vector3.DistanceSquared(p, endCenter));
+      if (clearance > bestClearance) {
+        bestClearance = clearance;
+        bestIdx = i;
+      }
+    }
+
+    const anchor = path[bestIdx];
+    const prev = path[Math.max(0, bestIdx - 1)];
+    const next = path[Math.min(path.length - 1, bestIdx + 1)];
+    let tangent = next.subtract(prev);
+    if (tangent.lengthSquared() < 1e-6) {
+      tangent = this.end.subtract(this.start);
+    }
+    if (tangent.lengthSquared() < 1e-6) {
+      tangent = Vector3.Right();
+    } else {
+      tangent.normalize();
+    }
+
+    const activeCamera = this.scene.activeCamera;
+    let toCamera = Vector3.Backward();
+    if (activeCamera) {
+      let cameraPosLocal = activeCamera.position.clone();
+      const parent = this.labelPlane.parent;
+      if (parent) {
+        parent.computeWorldMatrix(true);
+        const inv = parent.getWorldMatrix().clone();
+        inv.invert();
+        cameraPosLocal = Vector3.TransformCoordinates(activeCamera.position, inv);
+      }
+      toCamera = cameraPosLocal.subtract(anchor);
+      if (toCamera.lengthSquared() > 1e-6) {
+        toCamera.normalize();
+      }
+    }
+
+    let side = Vector3.Cross(tangent, toCamera);
+    if (side.lengthSquared() < 1e-6) {
+      side = Vector3.Cross(tangent, Vector3.Up());
+    }
+    if (side.lengthSquared() < 1e-6) {
+      side = Vector3.Right();
+    } else {
+      side.normalize();
+    }
+
+    const labelOffset = Math.max(0.22, Vector3.Distance(this.start, this.end) * 0.025);
+    const candidateA = anchor.add(side.scale(labelOffset));
+    const candidateB = anchor.subtract(side.scale(labelOffset));
+    const score = (point: Vector3) =>
+      Math.min(Vector3.DistanceSquared(point, startCenter), Vector3.DistanceSquared(point, endCenter));
+    const labelPos = score(candidateA) >= score(candidateB) ? candidateA : candidateB;
+    const cameraLift = Math.max(0.02, Vector3.Distance(this.start, this.end) * 0.004);
+    labelPos.addInPlace(toCamera.scale(cameraLift));
+    this.labelPlane.position.copyFrom(labelPos);
+
+    // Orient label in arc-local frame so it rotates with the arc naturally.
+    const xAxis = side.normalize();
+    let zAxis = Vector3.Cross(xAxis, tangent);
+    if (zAxis.lengthSquared() < 1e-6) {
+      zAxis = Vector3.Forward();
+    } else {
+      zAxis.normalize();
+    }
+    const yAxis = tangent.normalize();
+    const rotMat = Matrix.Identity();
+    Matrix.FromXYZAxesToRef(xAxis, yAxis, zAxis, rotMat);
+    this.labelPlane.rotationQuaternion = Quaternion.FromRotationMatrix(rotMat);
   }
 }
