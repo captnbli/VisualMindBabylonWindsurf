@@ -11,8 +11,9 @@ import Connector from './concepts/connector';
 import { Mode } from './concepts/types';
 import {
   NodeData, ConnectionData, GraphState, RelationshipType,
-  arcAlpha, CLUSTER_MAP
+  arcAlpha, CLUSTER_MAP, CURRENT_SAVE_VERSION, RELATIONSHIP_COLORS
 } from './types/graph_types';
+import { migrateToCurrentVersion } from './migrations';
 import { bus } from './events';
 
 // ─── Runtime entry types ──────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ interface ConnectorEntry {
   sourceId: string;
   targetId: string;
   relationshipType: RelationshipType;
+  label: string;
 }
 
 // ─── GraphManager ─────────────────────────────────────────────────────────────
@@ -45,6 +47,13 @@ export class GraphManager {
     this.worldRoot = config.worldRoot;
     this.camera = config.camera;
     this.engine = config.engine;
+
+    // Update all connector label positions each frame so they track arcs as the graph moves.
+    this.scene.registerBeforeRender(() => {
+      for (const [, entry] of this.connectorMap) {
+        entry.connector.update();
+      }
+    });
   }
 
   // ─── Node CRUD ─────────────────────────────────────────────────────────────
@@ -141,6 +150,7 @@ export class GraphManager {
     sourceId: string;
     targetId: string;
     relationshipType?: RelationshipType;
+    label?: string;
     id?: string;
   }): string | null {
     const src = this.nodeMap.get(opts.sourceId);
@@ -155,6 +165,9 @@ export class GraphManager {
       tgt.concept.nodeType ?? 'answer'
     );
 
+    const relType = opts.relationshipType ?? 'leads to';
+    const label   = opts.label ?? '';
+
     const connector = new Connector(this.scene, {
       start: src.concept.sphere.position.clone(),
       end: tgt.concept.sphere.position.clone(),
@@ -165,20 +178,21 @@ export class GraphManager {
       laneIndex,
       id: opts.id,
       alpha,
+      explicitColor: RELATIONSHIP_COLORS[relType],
     });
 
     connector.connector.metadata = {
       ...(connector.connector.metadata ?? {}),
       connectorId: connector.id,
     };
-
-    const relType = opts.relationshipType ?? 'leads to';
     this.connectorMap.set(connector.id, {
       connector,
       sourceId: opts.sourceId,
       targetId: opts.targetId,
       relationshipType: relType,
+      label,
     });
+    if (label) connector.setOverlayText(label);
 
     bus.emit('connectionCreated', {
       connectionId: connector.id,
@@ -186,6 +200,22 @@ export class GraphManager {
       targetId: opts.targetId,
     });
     return connector.id;
+  }
+
+  updateConnectionRelationship(connectionId: string, relType: RelationshipType): void {
+    const entry = this.connectorMap.get(connectionId);
+    if (!entry) return;
+    entry.relationshipType = relType;
+    entry.connector.setColor(RELATIONSHIP_COLORS[relType]);
+    bus.emit('connectionUpdated', { connectionId, sourceId: entry.sourceId });
+  }
+
+  updateConnectionLabel(connectionId: string, label: string): void {
+    const entry = this.connectorMap.get(connectionId);
+    if (!entry) return;
+    entry.label = label;
+    entry.connector.setOverlayText(label);
+    bus.emit('connectionUpdated', { connectionId, sourceId: entry.sourceId });
   }
 
   deleteConnector(connectionId: string): void {
@@ -204,6 +234,10 @@ export class GraphManager {
 
   // ─── Queries ───────────────────────────────────────────────────────────────
 
+  getConnectorSourceId(connectionId: string): string | null {
+    return this.connectorMap.get(connectionId)?.sourceId ?? null;
+  }
+
   getNode(nodeId: string): NodeEntry | undefined {
     return this.nodeMap.get(nodeId);
   }
@@ -219,7 +253,7 @@ export class GraphManager {
     const outgoing: ConnectionData[] = [];
     for (const [cid, ce] of this.connectorMap) {
       if (ce.sourceId === nodeId) {
-        outgoing.push({ id: cid, targetId: ce.targetId, relationshipType: ce.relationshipType });
+        outgoing.push({ id: cid, targetId: ce.targetId, relationshipType: ce.relationshipType, label: ce.label });
       }
     }
     const pos = c.sphere.position;
@@ -249,6 +283,10 @@ export class GraphManager {
     return out;
   }
 
+  getAllConcepts(): Concept[] {
+    return [...this.nodeMap.values()].map(e => e.concept);
+  }
+
   getNodeSpheres(): Mesh[] {
     return [...this.nodeMap.values()].map(e => e.concept.sphere);
   }
@@ -261,11 +299,17 @@ export class GraphManager {
       const nd = this.getNodeData(id);
       if (nd) nodes.push(nd);
     }
-    return { version: 1, nodes };
+    return { version: CURRENT_SAVE_VERSION, appVersion: (window as any).__APP_VERSION__ ?? 0, nodes };
   }
 
-  /** Rebuild graph from saved state. Clears all existing nodes first. */
-  deserialize(state: GraphState): void {
+  /** Rebuild graph from a raw parsed save, migrating forward if needed.
+   *  Returns false only if the data is unrecoverable (caller should back it up). */
+  deserialize(raw: unknown): boolean {
+    const state = migrateToCurrentVersion(raw);
+    if (!state) {
+      console.warn('[GraphManager] Could not migrate save — data unrecoverable.');
+      return false;
+    }
     this.clearAll();
     // First pass: create all nodes
     for (const nd of state.nodes) {
@@ -286,9 +330,11 @@ export class GraphManager {
           sourceId: nd.id,
           targetId: cd.targetId,
           relationshipType: cd.relationshipType,
+          label: cd.label ?? '',
         });
       }
     }
+    return true;
   }
 
   clearAll(): void {

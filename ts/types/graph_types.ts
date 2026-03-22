@@ -1,13 +1,22 @@
+import { Color3 } from '@babylonjs/core/Maths/math';
 import { Mode } from '../concepts/types';
 
 // ─── Serialised data model (what goes to localStorage) ───────────────────────
 
 export type RelationshipType = 'leads to' | 'part of' | 'requires' | 'enables';
 
+export const RELATIONSHIP_COLORS: Record<RelationshipType, Color3> = {
+  'leads to': new Color3(1.0, 0.82, 0.18),   // amber/gold
+  'part of':  new Color3(0.35, 0.65, 1.0),   // blue
+  'requires': new Color3(1.0, 0.42, 0.30),   // red-orange
+  'enables':  new Color3(0.35, 0.90, 0.50),  // green
+};
+
 export interface ConnectionData {
   id: string;
   targetId: string;
   relationshipType: RelationshipType;
+  label?: string;   // user-entered text shown on the arc (empty = no label shown)
 }
 
 export interface NodeData {
@@ -20,8 +29,13 @@ export interface NodeData {
   outgoingConnections: ConnectionData[];
 }
 
+// Bump this when the serialised schema changes in a breaking way.
+// deserialize() will discard saves with a different version rather than crashing.
+export const CURRENT_SAVE_VERSION = 1;
+
 export interface GraphState {
   version: number;
+  appVersion: number | string;   // APP_VERSION at time of save — helps identify which deploy to recover with
   nodes: NodeData[];
 }
 

@@ -1,37 +1,303 @@
 import { GraphState } from './types/graph_types';
 
 /**
- * First-launch demo graph: a brainstorm about the product itself.
- * Shows all 7 node types, solid cross-cluster arcs, and dimmed same-cluster arcs.
+ * First-launch demo graph: a guided tour of VisualMind itself.
+ * Central question: "How to use?" with clusters for navigation, creating,
+ * node types, rooms, and maps. Original brainstorm content preserved to the side.
  * Loaded only when localStorage has no saved state.
  */
 export const DEMO_BRAIN: GraphState = {
   version: 1,
   nodes: [
 
-    // ── Central thesis ────────────────────────────────────────────────────────
+    // ── Centre ────────────────────────────────────────────────────────────────
+    {
+      id:       'how-01',
+      label:    'How to use?',
+      notes:    'Welcome to VisualMind — a 3D spatial mind map. Each cluster below explains a key feature. Right-click any node to explore its room.',
+      nodeType: 'question',
+      weight:   5,
+      position: { x: 0, y: 0, z: 0 },
+      outgoingConnections: [
+        { id: 'hc-01', targetId: 'nav-01',    relationshipType: 'leads to' },
+        { id: 'hc-02', targetId: 'create-01', relationshipType: 'leads to' },
+        { id: 'hc-03', targetId: 'types-01',  relationshipType: 'part of'  },
+        { id: 'hc-04', targetId: 'rooms-01',  relationshipType: 'leads to' },
+        { id: 'hc-05', targetId: 'maps-01',   relationshipType: 'leads to' },
+      ],
+    },
+
+    // ── Navigation cluster ────────────────────────────────────────────────────
+    {
+      id:       'nav-01',
+      label:    'Move around',
+      notes:    'Three ways to navigate the 3D space.',
+      nodeType: 'answer',
+      weight:   3,
+      position: { x: 10, y: 2, z: 0 },
+      outgoingConnections: [
+        { id: 'nc-01', targetId: 'nav-02', relationshipType: 'part of' },
+        { id: 'nc-02', targetId: 'nav-03', relationshipType: 'part of' },
+        { id: 'nc-03', targetId: 'nav-04', relationshipType: 'part of' },
+      ],
+    },
+    {
+      id:       'nav-02',
+      label:    'Spin / Pan',
+      notes:    'Spin mode (default): drag the canvas to rotate the world. Pan mode: drag to slide left/right/up/down. Switch in the toolbar at the bottom.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: 14, y: 5, z: 1 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'nav-03',
+      label:    'Scroll to zoom',
+      notes:    'Mouse wheel or pinch to zoom. Camera pulls in and out along its view axis.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: 15, y: 0, z: -1 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'nav-04',
+      label:    'Focus on this',
+      notes:    'Right-click any node → "Focus on this". Camera flies smoothly to it. Great for quickly centering on a concept.',
+      nodeType: 'plus',
+      weight:   2,
+      position: { x: 13, y: -3, z: 3 },
+      outgoingConnections: [],
+    },
+
+    // ── Creating & editing cluster ─────────────────────────────────────────────
+    {
+      id:       'create-01',
+      label:    'Create & connect',
+      notes:    'Everything you need to build a graph.',
+      nodeType: 'answer',
+      weight:   3,
+      position: { x: -8, y: 4, z: 1 },
+      outgoingConnections: [
+        { id: 'cc-01', targetId: 'create-02', relationshipType: 'part of' },
+        { id: 'cc-02', targetId: 'create-03', relationshipType: 'part of' },
+        { id: 'cc-03', targetId: 'create-04', relationshipType: 'part of' },
+        { id: 'cc-04', targetId: 'create-05', relationshipType: 'part of' },
+      ],
+    },
+    {
+      id:       'create-02',
+      label:    'Click empty space',
+      notes:    'Click anywhere on the canvas to drop a new node. It opens selected in the panel — type the label immediately.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: -12, y: 7, z: 0 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'create-03',
+      label:    'Drag to move',
+      notes:    'Click and drag any node to reposition it in 3D space. Release to drop.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: -13, y: 2, z: 2 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'create-04',
+      label:    'Drag to connect',
+      notes:    'Drag from near the edge of one node toward another — when the target highlights, release to create a connection.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: -12, y: -2, z: 3 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'create-05',
+      label:    'Right-click menu',
+      notes:    'Right-click any node: Explore this idea (drill in), Focus on this (camera), or Delete node.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: -9, y: 7, z: -2 },
+      outgoingConnections: [],
+    },
+
+    // ── Node types cluster ─────────────────────────────────────────────────────
+    {
+      id:       'types-01',
+      label:    '7 node types',
+      notes:    'Each type has a colour and key shortcut. Press the key in the toolbar to switch brush before clicking to create.',
+      nodeType: 'answer',
+      weight:   3,
+      position: { x: 0, y: -10, z: 2 },
+      outgoingConnections: [
+        { id: 'tc-01', targetId: 'types-02', relationshipType: 'part of' },
+        { id: 'tc-02', targetId: 'types-03', relationshipType: 'part of' },
+        { id: 'tc-03', targetId: 'types-04', relationshipType: 'part of' },
+        { id: 'tc-04', targetId: 'types-05', relationshipType: 'part of' },
+        { id: 'tc-05', targetId: 'types-06', relationshipType: 'part of' },
+        { id: 'tc-06', targetId: 'types-07', relationshipType: 'part of' },
+        { id: 'tc-07', targetId: 'types-08', relationshipType: 'part of' },
+      ],
+    },
+    {
+      id:       'types-02',
+      label:    'A  Answer',
+      notes:    'Conclusions, decisions, assertions. The things you know (or think you know). Key: A',
+      nodeType: 'answer',
+      weight:   2,
+      position: { x: -8, y: -13, z: 0 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'types-03',
+      label:    'Q  Question',
+      notes:    'Open questions, unknowns, things to investigate. Key: Q',
+      nodeType: 'question',
+      weight:   2,
+      position: { x: -4, y: -15, z: 1 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'types-04',
+      label:    'N  Note',
+      notes:    'Observations, context, detail. The texture of an idea. Key: N',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: 1, y: -15, z: 3 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'types-05',
+      label:    '+  Plus',
+      notes:    'Advantages, benefits, things going for it. Key: +',
+      nodeType: 'plus',
+      weight:   2,
+      position: { x: 6, y: -14, z: 1 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'types-06',
+      label:    '−  Minus',
+      notes:    'Risks, downsides, things working against it. Key: −',
+      nodeType: 'minus',
+      weight:   2,
+      position: { x: 9, y: -12, z: -1 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'types-07',
+      label:    'L  Link',
+      notes:    'URLs, external resources, web references. Key: L',
+      nodeType: 'link',
+      weight:   2,
+      position: { x: 7, y: -9, z: -3 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'types-08',
+      label:    'R  Reference',
+      notes:    'Books, papers, prior art, sources. Key: R',
+      nodeType: 'reference',
+      weight:   2,
+      position: { x: -3, y: -12, z: -3 },
+      outgoingConnections: [],
+    },
+
+    // ── Rooms cluster ──────────────────────────────────────────────────────────
+    {
+      id:       'rooms-01',
+      label:    'Rooms',
+      notes:    'Every node can be a doorway into a deeper space. Explore an idea to create a room inside it — a whole new map to build into.',
+      nodeType: 'answer',
+      weight:   3,
+      position: { x: -6, y: -5, z: -5 },
+      outgoingConnections: [
+        { id: 'rc-01', targetId: 'rooms-02', relationshipType: 'part of'  },
+        { id: 'rc-02', targetId: 'rooms-03', relationshipType: 'leads to' },
+        { id: 'rc-03', targetId: 'rooms-04', relationshipType: 'part of'  },
+      ],
+    },
+    {
+      id:       'rooms-02',
+      label:    'Explore this idea ↗',
+      notes:    'Right-click any node → "Explore this idea". Creates a room inside that node and takes you there. The node gets a ↗ badge.',
+      nodeType: 'plus',
+      weight:   2,
+      position: { x: -10, y: -7, z: -3 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'rooms-03',
+      label:    'Breadcrumb trail',
+      notes:    'The breadcrumb at the top shows where you are. Click any ancestor to jump back. Press ESC to go up one level.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: -4, y: -9, z: -6 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'rooms-04',
+      label:    'Rooms panel',
+      notes:    'The right panel (below Delete) lists all rooms created under the current space. Click any room to navigate directly into it.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: -9, y: -4, z: -7 },
+      outgoingConnections: [],
+    },
+
+    // ── Maps cluster ───────────────────────────────────────────────────────────
+    {
+      id:       'maps-01',
+      label:    'Maps',
+      notes:    'Separate top-level mind maps — each with its own independent graph and rooms. Like having multiple notebooks.',
+      nodeType: 'answer',
+      weight:   3,
+      position: { x: 7, y: -5, z: -4 },
+      outgoingConnections: [
+        { id: 'mc-01', targetId: 'maps-02', relationshipType: 'part of' },
+        { id: 'mc-02', targetId: 'maps-03', relationshipType: 'part of' },
+      ],
+    },
+    {
+      id:       'maps-02',
+      label:    'Maps panel',
+      notes:    'Left-side panel lists all your maps. Click to switch. Double-click to rename.',
+      nodeType: 'note',
+      weight:   2,
+      position: { x: 11, y: -7, z: -2 },
+      outgoingConnections: [],
+    },
+    {
+      id:       'maps-03',
+      label:    '+ New Map',
+      notes:    'Creates a blank map and switches to it immediately. Use to start a completely fresh brain for a different project.',
+      nodeType: 'plus',
+      weight:   2,
+      position: { x: 6, y: -8, z: -7 },
+      outgoingConnections: [],
+    },
+
+    // ── Original brainstorm (preserved, shifted to the side) ──────────────────
     {
       id:    'demo-01',
       label: '3D Thinking',
       notes: 'Ideas have shape. Spatial relationships between concepts matter as much as the concepts themselves.',
       nodeType: 'answer',
       weight: 5,
-      position: { x: 0, y: 0, z: 0 },
+      position: { x: 25, y: 0, z: 0 },
       outgoingConnections: [
         { id: 'dc-01', targetId: 'demo-02', relationshipType: 'leads to'  },
         { id: 'dc-02', targetId: 'demo-03', relationshipType: 'leads to'  },
-        { id: 'dc-03', targetId: 'demo-10', relationshipType: 'built with' },
+        { id: 'dc-03', targetId: 'demo-10', relationshipType: 'enables'   },
       ],
     },
-
-    // ── Questions ─────────────────────────────────────────────────────────────
     {
       id:    'demo-02',
       label: 'Why spatial?',
       notes: 'The memory palace technique is 2,500 years old. Spatial context makes abstract ideas stick.',
       nodeType: 'question',
       weight: 3,
-      position: { x: 7, y: 4, z: -2 },
+      position: { x: 32, y: 4, z: -2 },
       outgoingConnections: [
         { id: 'dc-04', targetId: 'demo-04', relationshipType: 'leads to' },
         { id: 'dc-05', targetId: 'demo-05', relationshipType: 'leads to' },
@@ -43,33 +309,29 @@ export const DEMO_BRAIN: GraphState = {
       notes: 'Anyone building mental models under pressure: founders, researchers, writers, strategists.',
       nodeType: 'question',
       weight: 2,
-      position: { x: -5, y: 5, z: 4 },
+      position: { x: 20, y: 5, z: 4 },
       outgoingConnections: [
         { id: 'dc-06', targetId: 'demo-07', relationshipType: 'leads to' },
       ],
     },
-
-    // ── Observations (notes) ──────────────────────────────────────────────────
     {
       id:    'demo-04',
       label: 'Mem Palace',
-      notes: 'The method of loci: ancient orators placed arguments in imagined rooms. VisualMind externalizes that room.',
+      notes: 'The method of loci: ancient orators placed arguments in imagined rooms. VisualMind externalises that room.',
       nodeType: 'note',
       weight: 3,
-      position: { x: 10, y: 1, z: 6 },
+      position: { x: 35, y: 1, z: 6 },
       outgoingConnections: [],
     },
-
-    // ── Advantages (plus) ─────────────────────────────────────────────────────
     {
       id:    'demo-05',
       label: 'Cluster arcs',
       notes: 'Cross-cluster connections render solid; same-cluster links recede. The visual hierarchy is automatic.',
       nodeType: 'plus',
       weight: 3,
-      position: { x: 11, y: -2, z: 3 },
+      position: { x: 36, y: -2, z: 3 },
       outgoingConnections: [
-        { id: 'dc-07', targetId: 'demo-06', relationshipType: 'contrasts' },
+        { id: 'dc-07', targetId: 'demo-06', relationshipType: 'requires' },
       ],
     },
     {
@@ -78,29 +340,25 @@ export const DEMO_BRAIN: GraphState = {
       notes: 'Runs in the browser. No app, no signup. Just open and think.',
       nodeType: 'plus',
       weight: 2,
-      position: { x: 6, y: -6, z: 1 },
+      position: { x: 31, y: -6, z: 1 },
       outgoingConnections: [],
     },
-
-    // ── Risks (minus) ─────────────────────────────────────────────────────────
     {
       id:    'demo-06',
       label: '3D nav learn',
       notes: 'Pan, rotate, fly-to — new users need a moment to orient. The demo brain helps.',
       nodeType: 'minus',
       weight: 2,
-      position: { x: 14, y: 2, z: 1 },
+      position: { x: 39, y: 2, z: 1 },
       outgoingConnections: [],
     },
-
-    // ── Users (answers) ───────────────────────────────────────────────────────
     {
       id:    'demo-07',
       label: 'Founders',
       notes: 'YC-style rapid hypothesis testing. Connect market signal to product decision to open question.',
       nodeType: 'answer',
       weight: 3,
-      position: { x: -7, y: 7, z: 2 },
+      position: { x: 18, y: 7, z: 2 },
       outgoingConnections: [
         { id: 'dc-08', targetId: 'demo-01', relationshipType: 'requires' },
       ],
@@ -111,33 +369,29 @@ export const DEMO_BRAIN: GraphState = {
       notes: 'Literature review, hypothesis graphs, connecting findings across papers and domains.',
       nodeType: 'answer',
       weight: 2,
-      position: { x: -9, y: 4, z: -2 },
+      position: { x: 16, y: 4, z: -2 },
       outgoingConnections: [
         { id: 'dc-09', targetId: 'demo-01', relationshipType: 'requires' },
       ],
     },
-
-    // ── Prior art (references) ────────────────────────────────────────────────
     {
       id:    'demo-09',
       label: 'TheBrain',
       notes: 'The closest prior art. Fluid node navigation but 2D, desktop-only, and subscription-gated.',
       nodeType: 'reference',
       weight: 2,
-      position: { x: -4, y: -3, z: -8 },
+      position: { x: 21, y: -3, z: -8 },
       outgoingConnections: [
         { id: 'dc-10', targetId: 'demo-01', relationshipType: 'leads to' },
       ],
     },
-
-    // ── Technology (link) ─────────────────────────────────────────────────────
     {
       id:    'demo-10',
       label: 'BabylonJS',
       notes: 'WebGL2 engine. PBR materials, HighlightLayer, ArcRotateCamera, AdvancedDynamicTexture for labels.',
       nodeType: 'link',
       weight: 2,
-      position: { x: 3, y: -7, z: -5 },
+      position: { x: 28, y: -7, z: -5 },
       outgoingConnections: [
         { id: 'dc-11', targetId: 'demo-05', relationshipType: 'enables' },
       ],

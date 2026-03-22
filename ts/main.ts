@@ -15,10 +15,16 @@ import { selectionManager } from './selection_manager';
 import { persistenceManager } from './persistence_manager';
 import { panelController } from './ui/panel_controller';
 import { toolbarController } from './ui/toolbar_controller';
+import { contextMenu } from './ui/context_menu';
+import { navigationManager } from './navigation_manager';
+import { breadcrumbController } from './ui/breadcrumb';
+import { mapsManager } from './maps_manager';
+import { mapsPanel } from './ui/maps_panel';
 import { DEMO_BRAIN } from './demo_brain';
 import { Mode } from './concepts/types';
 
-const APP_VERSION = 43;
+const APP_VERSION = '0.83';
+(window as any).__APP_VERSION__ = APP_VERSION;
 document.title = `VisualMind v${APP_VERSION}`;
 
 // ─── HMR ──────────────────────────────────────────────────────────────────────
@@ -97,8 +103,15 @@ function createScene(canvas: HTMLCanvasElement): Scene {
   cameraController.init({ camera, worldRoot });
   selectionManager.init({ scene });
   persistenceManager.init();
+  // Maps must init before nav so the root storage key is correct
+  mapsManager.init();
+  navigationManager.setRoot(mapsManager.activeMap!.storageKey, mapsManager.activeMap!.name);
+  navigationManager.init();
   panelController.init();
   toolbarController.init();
+  contextMenu.init();
+  mapsPanel.init();
+  breadcrumbController.init();
 
   // ── Bus orchestration ─────────────────────────────────────────────────────
   wireOrchestration();
@@ -108,6 +121,8 @@ function createScene(canvas: HTMLCanvasElement): Scene {
   if (!restored) {
     graphManager.deserialize(DEMO_BRAIN);
   }
+  // Badge any nodes that already have a child space from a previous session
+  navigationManager.markExploredNodes();
 
   // ── Render loop ───────────────────────────────────────────────────────────
   engine.runRenderLoop(() => {
@@ -148,6 +163,12 @@ function wireOrchestration(): void {
   // Create connector when a link gesture completes
   bus.on('connectRequest', ({ sourceId, targetId, relationshipType }) => {
     graphManager.createConnector({ sourceId, targetId, relationshipType });
+  });
+
+  // Select source node when a connector arc is clicked
+  bus.on('connectorSelected', ({ connectionId }) => {
+    const sourceId = graphManager.getConnectorSourceId(connectionId);
+    if (sourceId) bus.emit('selectionChanged', { nodeId: sourceId });
   });
 
   // Delete selected node

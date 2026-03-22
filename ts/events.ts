@@ -11,6 +11,7 @@ export interface AppEvents {
   nodeUpdated:        { nodeId: string; field: 'label' | 'notes' | 'weight' | 'nodeType' };
   connectionCreated:  { connectionId: string; sourceId: string; targetId: string };
   connectionDeleted:  { connectionId: string; sourceId: string };
+  connectionUpdated:  { connectionId: string; sourceId: string };
 
   // Selection
   selectionChanged:   { nodeId: string | null };
@@ -31,6 +32,16 @@ export interface AppEvents {
   createNodeRequest:  { localX: number; localY: number; localZ: number };
   connectRequest:     { sourceId: string; targetId: string; relationshipType: RelationshipType };
   deleteRequest:      {};
+  showContextMenu:          { nodeId: string; screenX: number; screenY: number };
+  showConnectorContextMenu: { connectionId: string; screenX: number; screenY: number };
+  connectorSelected:        { connectionId: string };
+  exploreNode:        { nodeId: string };
+  navigateBack:       {};
+  navigationChanged:  {};
+  cameraReset:        {};
+
+  // Maps
+  mapsChanged:        {};
 
   // Tool
   toolModeChanged:    { mode: ToolMode };

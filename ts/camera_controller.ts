@@ -1,12 +1,12 @@
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
-import { Vector3, Quaternion } from "@babylonjs/core/Maths/math";
+import { Vector3, Quaternion, Matrix } from "@babylonjs/core/Maths/math";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 
 import { bus } from './events';
 import { graphManager } from './graph_manager';
 
 // Camera radius when focused on a node
-const FLY_TO_RADIUS = 10;
+const FLY_TO_RADIUS = 30;
 
 // Pan: world units per pixel (scale by camera radius each frame)
 const PAN_SCALE = 0.0006;
@@ -20,8 +20,8 @@ const ROTATION_SPEED = 0.0025;
 const ROTATION_MIN_STEP = 0.0025;
 
 // Fly-to lerp factor per frame
-const FLY_LERP = 0.08;
-const FLY_DONE_THRESHOLD = 0.01;
+const FLY_LERP = 0.12;
+const FLY_DONE_THRESHOLD = 0.05;
 
 export class CameraController {
   private camera!: ArcRotateCamera;
@@ -53,11 +53,15 @@ export class CameraController {
     bus.on('rotateMove',({ deltaX, deltaY }) => this.applyRotation(deltaX, deltaY));
     bus.on('rotateEnd', ()                   => this.onRotateEnd());
     bus.on('zoom',      ({ factor })         => this.applyZoom(factor));
-    bus.on('flyToNode', ({ nodeId })         => this.startFlyTo(nodeId));
+    bus.on('flyToNode',    ({ nodeId })  => this.startFlyTo(nodeId));
+    bus.on('cameraReset', ()             => this.reset());
 
-    // Any direct pointer interaction cancels momentum and fly-to
+    // Cancel fly-to when the user starts dragging a node (both would fight)
     bus.on('nodePointerDown',  () => this.cancelFlyAndMomentum());
-    bus.on('emptyPointerDown', () => this.cancelFlyAndMomentum());
+    // Note: emptyPointerDown intentionally NOT listed — cancelling there aborts
+    // the fly-to the moment the user clicks the canvas to start spinning, before
+    // the animation has had any chance to run.  applyRotation / applyPan already
+    // call cancelFlyAndMomentum() as soon as real pointer movement begins.
   }
 
   // ─── Per-frame update (called from main render loop) ──────────────────────
@@ -66,11 +70,11 @@ export class CameraController {
     this.stepFlyTo();
     this.stepMomentum();
 
-    // Tick concept spin animations
-    for (const obj of graphManager.getAllObjects()) {
-      if ('update' in obj && typeof (obj as any).update === 'function') {
-        (obj as any).update();
-      }
+    // Tick concept spin animations only — connectors are updated each frame
+    // by graphManager's scene.registerBeforeRender callback; calling update()
+    // on them here too would double every per-frame allocation (Vector3, Matrix).
+    for (const concept of graphManager.getAllConcepts()) {
+      concept.update();
     }
   }
 
@@ -132,6 +136,14 @@ export class CameraController {
     const stepQ  = yawQ.multiply(pitchQ);
     const cur    = this.worldRoot.rotationQuaternion ?? Quaternion.Identity();
     this.worldRoot.rotationQuaternion = stepQ.multiply(cur).normalize();
+
+    // Also rotate worldRoot.position by stepQ so that spin always orbits world origin
+    // (the camera target), regardless of where worldRoot.position currently sits.
+    if (this.worldRoot.position.lengthSquared() > 1e-6) {
+      const rotMat = new Matrix();
+      stepQ.toRotationMatrix(rotMat);
+      this.worldRoot.position = Vector3.TransformNormal(this.worldRoot.position, rotMat);
+    }
   }
 
   private onRotateEnd(): void {
@@ -159,14 +171,34 @@ export class CameraController {
 
   private startFlyTo(nodeId: string): void {
     const node = graphManager.getNode(nodeId);
-    if (!node) return;
+    if (!node) {
+      console.warn('[FlyTo] node not found:', nodeId);
+      return;
+    }
 
-    const nodeWorldPos = node.concept.sphere.getAbsolutePosition();
-    // Move worldRoot so the node arrives at the camera target (origin)
-    this.flyTargetWorldRootPos = this.worldRoot.position.subtract(nodeWorldPos);
+    this.cancelFlyAndMomentum();
+
+    // sphere.position is in worldRoot's LOCAL space.
+    // To place the sphere at world origin we need:
+    //   worldRoot.position + R * sphere.localPos = 0
+    //   worldRoot.position = -(R * sphere.localPos)
+    // Using local position avoids any stale getAbsolutePosition() cache issues.
+    const sphere = node.concept.sphere;
+    const rot = this.worldRoot.rotationQuaternion ?? Quaternion.Identity();
+    const rotMatrix = new Matrix();
+    rot.toRotationMatrix(rotMatrix);
+    const targetPos = Vector3.TransformNormal(sphere.position, rotMatrix).negateInPlace();
+
+    console.log('[FlyTo] node:', nodeId, 'localPos:', sphere.position.toString(), '→ worldRoot target:', targetPos.toString());
+
+    // Snap position immediately — clone so worldRoot._position and flyTargetWorldRootPos
+    // are separate objects and don't alias each other.
+    this.worldRoot.position.copyFrom(targetPos);
+
+    // Animate only the camera radius so the user sees clear visual feedback.
+    this.flyTargetWorldRootPos = targetPos.clone();
     this.flyTargetRadius = FLY_TO_RADIUS;
     this.flyActive = true;
-    this.momActive = false;
   }
 
   private stepFlyTo(): void {
@@ -182,6 +214,13 @@ export class CameraController {
       this.camera.radius      = this.flyTargetRadius;
       this.flyActive = false;
     }
+  }
+
+  private reset(): void {
+    this.cancelFlyAndMomentum();
+    this.worldRoot.position = Vector3.Zero();
+    this.worldRoot.rotationQuaternion = Quaternion.Identity();
+    this.camera.radius = 50;
   }
 
   private cancelFlyAndMomentum(): void {

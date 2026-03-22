@@ -8,7 +8,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { PBRMetallicRoughnessMaterial } from "@babylonjs/core/Materials/PBR/pbrMetallicRoughnessMaterial";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { AdvancedDynamicTexture } from "@babylonjs/gui/2D/advancedDynamicTexture";
-import { TextBlock } from "@babylonjs/gui/2D/controls";
+import { TextBlock, TextWrapping } from "@babylonjs/gui/2D/controls";
 import { Control } from "@babylonjs/gui/2D/controls/control";
 import { Mode } from './types';
 
@@ -52,6 +52,7 @@ class Concept {
   private labelBand: Mesh | null = null;
   private labelBandTexture: AdvancedDynamicTexture | null = null;
   private labelTextBlocks: TextBlock[] = [];
+  private childBadge: TextBlock | null = null;
   private spinAngle: number = 0;
   private static readonly SPIN_SPEED = 0.003;
 
@@ -98,7 +99,7 @@ class Concept {
       return;
     }
 
-    const bandHeight = Math.max(0.25, this.radius * 0.35);
+    const bandHeight = Math.max(0.5, this.radius * 0.65);
     this.labelBand = MeshBuilder.CreateCylinder(
       "labelBand",
       {
@@ -124,7 +125,7 @@ class Concept {
     this.labelBandTexture = AdvancedDynamicTexture.CreateForMesh(
       this.labelBand,
       2048,
-      256,
+      512,
       false
     );
     bandMat.diffuseTexture = this.labelBandTexture;
@@ -139,8 +140,9 @@ class Concept {
     leftText.height = "100%";
     leftText.left = "-26%";
     leftText.color = this.textColor;
-    leftText.fontSize = 150;
-    leftText.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+    leftText.fontSize = 160;
+    leftText.textWrapping = TextWrapping.Ellipsis;
+    leftText.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
     leftText.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
 
     const rightText = new TextBlock("labelRight");
@@ -148,8 +150,9 @@ class Concept {
     rightText.height = "100%";
     rightText.left = "26%";
     rightText.color = this.textColor;
-    rightText.fontSize = 150;
-    rightText.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_CENTER;
+    rightText.fontSize = 160;
+    rightText.textWrapping = TextWrapping.Ellipsis;
+    rightText.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_LEFT;
     rightText.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
 
     this.labelBandTexture.addControl(leftText);
@@ -213,13 +216,32 @@ class Concept {
   }
 
   public setOverlayText(newText: string): void {
-    const trimmed = newText.slice(0, 12);
+    const trimmed = newText.slice(0, 32);
     this.label = trimmed;
     this.updateLabelBandText();
   }
 
   public getOverlayText(): string {
     return this.label;
+  }
+
+  public setHasChildren(has: boolean): void {
+    this.ensureLabelBand();
+    if (has && !this.childBadge) {
+      const badge = new TextBlock('childBadge_' + this.id);
+      badge.text = '↗';
+      badge.color = 'rgba(255,255,255,0.55)';
+      badge.fontSize = 120;
+      badge.textHorizontalAlignment = Control.HORIZONTAL_ALIGNMENT_RIGHT;
+      badge.textVerticalAlignment = Control.VERTICAL_ALIGNMENT_CENTER;
+      badge.paddingRight = '24px';
+      this.labelBandTexture!.addControl(badge);
+      this.childBadge = badge;
+    } else if (!has && this.childBadge) {
+      this.labelBandTexture!.removeControl(this.childBadge);
+      this.childBadge.dispose();
+      this.childBadge = null;
+    }
   }
 }
 

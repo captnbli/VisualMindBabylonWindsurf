@@ -46,6 +46,8 @@ export class InputHandler {
 
   // Connector linking state
   private connectorSourceId: string | null = null;
+  private connectorRightClickId: string | null = null;
+  private connectorClickId: string | null = null;
   private connectorDragPlane: Plane | null = null;
   private connectorHoverNodeId: string | null = null;
   private connectorLastEndLocal: Vector3 | null = null;
@@ -146,8 +148,12 @@ export class InputHandler {
 
     // Single pick, shared between button branches
     const pick = this.scene.pick(pos.x, pos.y);
-    const nodeId = pick?.hit && pick.pickedMesh
-      ? graphManager.nodeIdFromSphere(this.findSphereAncestor(pick.pickedMesh) as Mesh)
+    const sphereAncestor = pick?.hit && pick.pickedMesh
+      ? this.findSphereAncestor(pick.pickedMesh)
+      : null;
+    const nodeId = sphereAncestor ? graphManager.nodeIdFromSphere(sphereAncestor) : null;
+    const pickedConnId = !nodeId && pick?.hit
+      ? (pick.pickedMesh?.metadata?.connectorId as string | undefined) ?? null
       : null;
 
     // ── Right button ──────────────────────────────────────────────────────────
@@ -165,14 +171,28 @@ export class InputHandler {
         this.inputState = InputState.ConnectorLinking;
         bus.emit('nodePointerDown', { nodeId });
       } else {
-        this.inputState = InputState.Panning;
-        const w = this.pointerToWorld(pos.x, pos.y);
-        bus.emit('emptyPointerDown', w);
+        // Check if a connector arc or label was right-clicked
+        const connId = pickedConnId;
+        if (connId) {
+          this.connectorRightClickId = connId;
+          // No state change — just wait for pointer up
+        } else {
+          this.inputState = InputState.Panning;
+          const w = this.pointerToWorld(pos.x, pos.y);
+          bus.emit('emptyPointerDown', w);
+        }
       }
       return;
     }
 
     // ── Left button ───────────────────────────────────────────────────────────
+    if (pickedConnId && !nodeId) {
+      // Clicked on a connector arc — will select source node on pointer-up.
+      this.connectorClickId = pickedConnId;
+      this.inputState = InputState.PointerArmed;
+      return;
+    }
+
     if (nodeId) {
       const sphere = this.nodeIdToSphere(nodeId);
       if (sphere) {
@@ -295,9 +315,13 @@ export class InputHandler {
         bus.emit('nodeDragEnd', { nodeId: this.draggedNodeId });
       }
       if (this.inputState === InputState.PointerArmed && !this.hasMoved) {
-        const local = pos ? this.pointerToLocal(pos.x, pos.y) : null;
-        if (local) {
-          bus.emit('createNodeRequest', { localX: local.x, localY: local.y, localZ: local.z });
+        if (this.connectorClickId) {
+          bus.emit('connectorSelected', { connectionId: this.connectorClickId });
+        } else {
+          const local = pos ? this.pointerToLocal(pos.x, pos.y) : null;
+          if (local) {
+            bus.emit('createNodeRequest', { localX: local.x, localY: local.y, localZ: local.z });
+          }
         }
       }
     }
@@ -307,14 +331,32 @@ export class InputHandler {
     }
 
     if (this.activeButton === 2) {
+      // Right-click tap on a connector label → connector context menu
+      if (this.connectorRightClickId && !this.hasMoved) {
+        bus.emit('showConnectorContextMenu', {
+          connectionId: this.connectorRightClickId,
+          screenX: e.clientX,
+          screenY: e.clientY,
+        });
+      }
+
       if (this.inputState === InputState.ConnectorLinking && this.connectorSourceId) {
-        const targetId = this.resolveConnectorTarget();
-        if (targetId) {
-          bus.emit('connectRequest', {
-            sourceId: this.connectorSourceId,
-            targetId,
-            relationshipType: 'leads to',
+        if (!this.hasMoved) {
+          // Right-click tap on node → context menu
+          bus.emit('showContextMenu', {
+            nodeId: this.connectorSourceId,
+            screenX: e.clientX,
+            screenY: e.clientY,
           });
+        } else {
+          const targetId = this.resolveConnectorTarget();
+          if (targetId) {
+            bus.emit('connectRequest', {
+              sourceId: this.connectorSourceId,
+              targetId,
+              relationshipType: 'leads to',
+            });
+          }
         }
       }
       if (this.inputState === InputState.Panning) {
@@ -460,6 +502,8 @@ export class InputHandler {
     this.dragPlane         = null;
     this.dragOffset        = Vector3.Zero();
     this.connectorSourceId    = null;
+    this.connectorRightClickId = null;
+    this.connectorClickId      = null;
     this.connectorDragPlane   = null;
     this.connectorHoverNodeId = null;
     this.connectorLastEndLocal = null;

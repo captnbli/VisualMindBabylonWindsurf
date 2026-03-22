@@ -2,12 +2,24 @@ import { bus } from './events';
 import { graphManager } from './graph_manager';
 
 const STORAGE_KEY  = 'visualmind_graph_v2';
+export { STORAGE_KEY };
 const AUTOSAVE_MS  = 500;
 const EXPORT_FILENAME = 'visualmind-brain.json';
 
 export class PersistenceManager {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private dirty = false;
+  private currentKey = STORAGE_KEY;
+
+  setStorageKey(key: string): void {
+    // Flush any pending save to the old key first
+    if (this.saveTimer !== null) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      this.persist();
+    }
+    this.currentKey = key;
+  }
 
   // ─── Init ──────────────────────────────────────────────────────────────────
 
@@ -23,8 +35,9 @@ export class PersistenceManager {
     bus.on('nodeCreated',      schedule);
     bus.on('nodeDeleted',      schedule);
     bus.on('nodeUpdated',      schedule);
-    bus.on('connectionCreated',schedule);
+    bus.on('connectionCreated', schedule);
     bus.on('connectionDeleted',schedule);
+    bus.on('connectionUpdated',schedule);
     bus.on('nodeDragEnd',      schedule);  // position changed
   }
 
@@ -45,7 +58,7 @@ export class PersistenceManager {
     const state = graphManager.serialize();
     const json  = JSON.stringify(state);
     try {
-      localStorage.setItem(STORAGE_KEY, json);
+      localStorage.setItem(this.currentKey, json);
       this.dirty = false;
       this.emitSaveState('saved');
     } catch (err: any) {
@@ -64,16 +77,25 @@ export class PersistenceManager {
 
   /** Returns true if saved state was found and loaded. */
   load(): boolean {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(this.currentKey);
     if (!raw) return false;
     try {
-      const state = JSON.parse(raw);
-      graphManager.deserialize(state);
+      const parsed = JSON.parse(raw);
+      if (!graphManager.deserialize(parsed)) {
+        // Migration failed — back up raw data and auto-download it before clearing
+        const backupKey = `${this.currentKey}::backup::${Date.now()}`;
+        localStorage.setItem(backupKey, raw);
+        localStorage.removeItem(this.currentKey);
+        const savedWith = parsed?.appVersion ? `v${parsed.appVersion}` : 'an older version';
+        this.downloadRecoveryFile(raw, savedWith);
+        this.showToast(`⚠ Data saved with ${savedWith} could not be loaded. Your graph has been downloaded as a backup file — don't delete it.`);
+        return false;
+      }
       return true;
     } catch (err) {
       console.error('[PersistenceManager] Failed to parse saved state:', err);
       this.showToast('⚠ Saved data was corrupted. Starting fresh.');
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(this.currentKey);
       return false;
     }
   }
@@ -107,6 +129,18 @@ export class PersistenceManager {
 
   private emitSaveState(state: 'saving' | 'saved' | 'error'): void {
     window.dispatchEvent(new CustomEvent('vm:saveState', { detail: { state } }));
+  }
+
+  // ─── Recovery download ────────────────────────────────────────────────────
+
+  private downloadRecoveryFile(raw: string, savedWith: string): void {
+    const blob = new Blob([raw], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `visualmind-recovery-${savedWith}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // ─── Toast notification ───────────────────────────────────────────────────

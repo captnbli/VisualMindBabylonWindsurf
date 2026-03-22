@@ -1,0 +1,47 @@
+{
+  "date": "2026-03-21",
+  "window": "7d",
+  "metrics": {
+    "commits": 3,
+    "contributors": 1,
+    "prs_merged": 0,
+    "insertions": 5087,
+    "deletions": 1311,
+    "net_loc": 3776,
+    "test_loc": 640,
+    "test_ratio": 0.126,
+    "active_days": 1,
+    "sessions": 1,
+    "deep_sessions": 1,
+    "avg_session_minutes": 76,
+    "loc_per_session_hour": 4000,
+    "feat_pct": 0.33,
+    "fix_pct": 0.0,
+    "peak_hour": 16,
+    "ai_assisted_commits": 3
+  },
+  "authors": {
+    "Pete Miller": {
+      "commits": 3,
+      "insertions": 5087,
+      "deletions": 1311,
+      "test_ratio": 0.126,
+      "top_area": "ts/"
+    }
+  },
+  "version_range": [],
+  "streak_days": 1,
+  "tweetable": "Week of Mar 14: 3 commits · 5,087 insertions · 3,776 net LOC · 12.6% tests · 1 deep session · peak: 3–5pm | Streak: 1d",
+  "test_health": {
+    "total_test_files": 2,
+    "tests_added_this_period": 640,
+    "regression_test_commits": 0,
+    "test_files_changed": 2
+  },
+  "skill_usage": {
+    "office-hours": 1,
+    "plan-eng-review": 1,
+    "design-consultation": 1,
+    "retro": 1
+  }
+}
