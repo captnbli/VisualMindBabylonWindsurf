@@ -4,7 +4,7 @@ A 3D spatial mind-mapping tool built on [Babylon.js](https://babylonjs.com). Pla
 
 ## Try it now
 
-**[helpful-zuccutto-9f1a65.netlify.app](https://helpful-zuccutto-9f1a65.netlify.app)**
+**[helpful-zuccutto-9f1a65.netlify.app](https://helpful-zuccutto-9f1a65.netlify.app/)**
 
 No install required — runs in the browser.
 
