@@ -34,13 +34,13 @@ npm test         # run tests
 
 | Type      | Key | Color     | Purpose                        |
 |-----------|-----|-----------|--------------------------------|
-| Answer    | `a` | Blue      | Resolved conclusions           |
-| Question  | `q` | Amber     | Open questions to explore      |
+| Answer    | `a` | Gold      | Resolved conclusions           |
+| Question  | `q` | Blue      | Open questions to explore      |
 | Note      | `n` | Teal      | Context and supporting info    |
-| Plus      | `+` | Lime      | Positive evidence              |
-| Minus     | `-` | Coral     | Counterpoints and tension      |
-| Link      | `l` | Violet    | Connections between ideas      |
-| Reference | `r` | Orange    | External sources               |
+| Plus      | `+` | Green     | Positive evidence              |
+| Minus     | `-` | Red       | Counterpoints and tension      |
+| Link      | `l` | Various   | Connections between ideas      |
+| Reference | `r` | Purple    | External sources               |
 
 ## Controls
 
